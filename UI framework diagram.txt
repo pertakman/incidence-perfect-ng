@@ -1,0 +1,48 @@
++----------------------------------------------+
+¦                APPLICATION                   ¦
+¦  inclinometer_v4.2.ino                       ¦
+¦                                              ¦
+¦  - Computes roll / pitch                     ¦
+¦  - Knows orientation mode                    ¦
+¦  - Knows alignment logic                     ¦
+¦                                              ¦
+¦  Calls ONLY these functions:                 ¦
+¦                                              ¦
+¦    ui_set_angles(roll, pitch)                ¦
+¦    ui_set_orientation(mode)                  ¦
+¦    ui_set_state(UI_STATE_*)                  ¦
+¦                                              ¦
++---------------?------------------------------+
+                ¦
+                ¦  (simple function calls)
+                ¦
++----------------------------------------------+
+¦                  UI CORE                     ¦
+¦              ui_lvgl.ino                     ¦
+¦                                              ¦
+¦  +----------------------------------------+  ¦
+¦  ¦ UI STATE MACHINE                        ¦  ¦
+¦  ¦  ui_state_t                             ¦  ¦
+¦  ¦  axis_display_t                         ¦  ¦
+¦  +----------------------------------------+  ¦
+¦                 ¦                             ¦
+¦                 ?                             ¦
+¦  +----------------------------------------+  ¦
+¦  ¦ UI POLICIES (pure functions)            ¦  ¦
+¦  ¦                                        ¦  ¦
+¦  ¦  apply_state_policy()                  ¦  ¦
+¦  ¦  apply_axis_policy()                   ¦  ¦
+¦  ¦  apply_orientation_policy()             ¦  ¦
+¦  +----------------------------------------+  ¦
+¦                 ¦                             ¦
+¦                 ?                             ¦
+¦  +----------------------------------------+  ¦
+¦  ¦ LVGL OBJECTS                            ¦  ¦
+¦  ¦  labels, groups, buttons               ¦  ¦
+¦  ¦                                        ¦  ¦
+¦  ¦  (NO LOGIC HERE)                       ¦  ¦
+¦  +----------------------------------------+  ¦
+¦                                              ¦
+¦  Buttons ? emit EVENTS only                  ¦
+¦  No button mutates UI directly               ¦
++----------------------------------------------+
