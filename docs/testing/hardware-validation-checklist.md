@@ -16,8 +16,6 @@ Use this checklist against the current firmware build to establish a known-good 
 
 ## Known Current UI Limitations
 
-- `MODE` button is currently a no-op.
-- `ROTATE` button is currently a no-op.
 - `ALIGN` in UI runs a temporary capture path (`alignmentCapture`) and does not execute full 6-orientation alignment flow.
 
 ## Test Cases
@@ -33,12 +31,12 @@ Use this checklist against the current firmware build to establish a known-good 
 | T07 | Tap `AXIS` repeatedly | Layout cycles: both -> roll-only -> pitch-only -> both |  |  |
 | T08 | Tap `ALIGN`, then `CANCEL` (`ZERO` label in align mode) | Enters alignment modal, then returns to normal UI |  |  |
 | T09 | Tap `ALIGN`, then `CAPTURE`, then `DONE` | State machine transitions correctly with instruction text updates |  |  |
-| T10 | Tap `MODE` | No visible change (known current behavior) |  |  |
-| T11 | Tap `ROTATE` | No visible change (known current behavior) |  |  |
+| T10 | Tap `MODE` | Toggle orientation mode (`SCREEN UP` <-> `SCREEN VERTICAL`) |  |  |
+| T11 | Tap `ROTATE` | Full UI rotates 180 deg and status `ROT` updates |  |  |
 | T12 | In serial monitor send `z` | Zero reference applied, readings recenter |  |  |
 | T13 | In serial monitor send `u` | Orientation set to screen-up, mode text prints in serial |  |  |
 | T14 | In serial monitor send `v` | Orientation set to screen-vertical, mode text prints in serial |  |  |
-| T15 | In serial monitor send `i` | Output switches between `INCIDENCE:` and `Roll/Pitch` print format |  |  |
+| T15 | In serial monitor send `a` | Output cycles `Roll+Pitch` -> `Roll only` -> `Pitch only` |  |  |
 | T16 | In serial monitor send `c` while stationary | Recalibration runs; readings settle after completion |  |  |
 | T17 | Power cycle after T13/T15 changes | Orientation/incidence preferences persist from EEPROM |  |  |
 

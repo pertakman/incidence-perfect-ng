@@ -70,17 +70,7 @@ typedef enum {
 
 static ui_state_t ui_state = UI_STATE_NORMAL;
 
-// ============================================================
-// AXIS DISPLAY MODE
-// ============================================================
-
-typedef enum {
-  AXIS_BOTH,
-  AXIS_ROLL,
-  AXIS_PITCH
-} axis_display_t;
-
-static axis_display_t axis_mode = AXIS_BOTH;
+volatile AxisDisplayMode ui_axis_mode = AXIS_BOTH;
 
 // ============================================================
 // UI OBJECTS
@@ -119,7 +109,7 @@ static lv_obj_t *label_btn_rotate;
 
 static const char *axis_mode_text()
 {
-  switch (axis_mode) {
+  switch (ui_axis_mode) {
     case AXIS_ROLL:  return "ROLL";
     case AXIS_PITCH: return "PITCH";
     default:         return "BOTH";
@@ -128,8 +118,8 @@ static const char *axis_mode_text()
 
 static void update_status_label()
 {
-  static char last[40] = "";
-  char buf[40];
+  static char last[64] = "";
+  char buf[64];
   const char *orientation_text =
     (orientationMode == MODE_SCREEN_VERTICAL) ? "SCREEN VERTICAL" : "SCREEN UP";
   snprintf(buf, sizeof(buf), "%s | %s | ROT %d",
@@ -196,7 +186,7 @@ void my_disp_flush(lv_disp_drv_t *disp_drv,
 
 static void apply_axis_layout()
 {
-  switch (axis_mode) {
+  switch (ui_axis_mode) {
 
     case AXIS_BOTH:
       lv_obj_clear_flag(roll_grp,  LV_OBJ_FLAG_HIDDEN);
@@ -287,7 +277,20 @@ static void ui_set_state(ui_state_t new_state)
 // APPLICATION HOOKS
 // ============================================================
 
-void cycleMode(void)      {}
+void cycleMode(void)
+{
+  setOrientation(
+    orientationMode == MODE_SCREEN_VERTICAL ? MODE_SCREEN_UP : MODE_SCREEN_VERTICAL
+  );
+}
+
+void cycleAxisMode(void)
+{
+  ui_axis_mode = (AxisDisplayMode)((ui_axis_mode + 1) % 3);
+  if (ui_state == UI_STATE_NORMAL) {
+    apply_axis_layout();
+  }
+}
 
 // ============================================================
 // BUTTON CALLBACKS
@@ -302,8 +305,7 @@ static void on_zero_pressed(lv_event_t *)
 static void on_axis_pressed(lv_event_t *)
 {
   if (ui_state != UI_STATE_NORMAL) return;
-  axis_mode = (axis_display_t)((axis_mode + 1) % 3);
-  apply_axis_layout();
+  cycleAxisMode();
 }
 
 static void on_mode_pressed(lv_event_t *)
@@ -623,18 +625,19 @@ void loop_display()
 {
   static uint32_t last_tick = 0;
   static uint32_t last_ui   = 0;
-  static bool last_rotation = displayRotated;
+  static int last_rotation = -1;
 
   uint32_t now = millis();
+  int desired_rotation = displayRotated ? 1 : 0;
 
-  if (last_rotation != displayRotated) {
+  if (last_rotation != desired_rotation) {
     if (disp_handle) {
       lv_disp_set_rotation(
         disp_handle,
         displayRotated ? LV_DISP_ROT_180 : LV_DISP_ROT_NONE
       );
     }
-    last_rotation = displayRotated;
+    last_rotation = desired_rotation;
   }
 
   if (now - last_tick >= 5) {

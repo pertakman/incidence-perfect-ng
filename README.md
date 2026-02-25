@@ -22,6 +22,40 @@ This repo is now configured as a PlatformIO project for VS Code.
    - PlatformIO sidebar -> `Monitor`
    - or terminal: `pio device monitor -b 115200`
 
+## Fresh Unit Preparation
+
+Use this before first-time flashing a new hardware unit.
+
+1. Connect only one unit at a time.
+2. Erase flash once:
+   - terminal: `pio run -e esp32s3 -t erase`
+3. Upload firmware:
+   - terminal: `pio run -e esp32s3 -t upload`
+4. Open serial monitor:
+   - terminal: `pio device monitor -b 115200`
+5. Run a quick sanity check:
+   - `ZERO` works
+   - `AXIS` cycles (`BOTH -> ROLL -> PITCH`)
+   - `MODE` toggles orientation (`SCREEN UP <-> SCREEN VERTICAL`)
+   - `ROTATE` flips 180 and persists after reboot
+
+## Serial Commands
+
+- `z`: set zero reference from current position
+- `c`: quick sensor recalibration (`calibrateOffsets()` + `initializeAngles()`)
+- `C`: full mechanical alignment workflow (`runAlignmentCalibration()`)
+- `u`: force `SCREEN UP` orientation mode
+- `v`: force `SCREEN VERTICAL` orientation mode
+- `m`: toggle orientation mode (`u/v`)
+- `a`: cycle axis display/output (`BOTH -> ROLL -> PITCH`)
+- `r`: toggle 180-degree screen rotation
+
+### `c` vs `C`
+
+- Use `c` for quick recalibration when values drift or after a temperature/stability change.
+- Use `C` when you need full mechanical alignment (mounting/enclosure bias correction).
+- In short: `c` is fast sensor re-zero; `C` is full alignment procedure.
+
 ## Notes
 
 - Project config is in `platformio.ini`.

@@ -12,15 +12,22 @@ enum OrientationMode {
   MODE_SCREEN_VERTICAL = 1
 };
 
+enum AxisDisplayMode {
+  AXIS_BOTH = 0,
+  AXIS_ROLL = 1,
+  AXIS_PITCH = 2
+};
+
 extern OrientationMode orientationMode;
 extern bool displayRotated;
+extern volatile AxisDisplayMode ui_axis_mode;
 
 // Forward declarations used across files
 void setOrientation(OrientationMode m);
 
 void setZeroReference(void);
 void cycleMode(void);
-void captureAlignment(void);
+void cycleAxisMode(void);
 void toggleRotation(void);
 
 void alignmentCapture(void);

@@ -46,7 +46,6 @@
 
 #define EEPROM_SIZE 128
 #define EEPROM_ADDR_MODE       0
-#define EEPROM_ADDR_INCIDENCE  1
 #define EEPROM_ADDR_ROTATION   2
 #define EEPROM_ADDR_ALIGN      16   // stores: align_roll, align_pitch (floats)
 
@@ -68,7 +67,6 @@ volatile float ui_pitch = 0.0f;
 QMI8658 imu;
 
 OrientationMode orientationMode;
-bool incidenceMode = false;
 bool displayRotated = false;
 
 // Sensor bias offsets (tool frame, SI units)
@@ -94,7 +92,6 @@ void calibrateOffsets();
 void initializeAngles();
 void printMode();
 void handleSerial();
-void toggleIncidence();
 void runAlignmentCalibration();
 void captureAngles(float& r, float& p);
 bool waitForC(unsigned long timeout_ms);
@@ -152,7 +149,6 @@ void setup_inclinometer() {
   orientationMode = (OrientationMode)EEPROM.read(EEPROM_ADDR_MODE);
   if (orientationMode > MODE_SCREEN_VERTICAL)
     orientationMode = MODE_SCREEN_UP;
-  incidenceMode   = EEPROM.read(EEPROM_ADDR_INCIDENCE);
   displayRotated = EEPROM.read(EEPROM_ADDR_ROTATION) ? true : false;
   EEPROM.get(EEPROM_ADDR_ALIGN,     align_roll);
   EEPROM.get(EEPROM_ADDR_ALIGN + 4, align_pitch);
@@ -235,14 +231,21 @@ void loop_inclinometer() {
     r = -r;
 
   // Output
-  if (incidenceMode) {
-    Serial.print("INCIDENCE: ");
-    Serial.println(p, 2);
-  } else {
-    Serial.print("Roll: ");
-    Serial.print(r, 2);
-    Serial.print("  Pitch: ");
-    Serial.println(p, 2);
+  switch (ui_axis_mode) {
+    case AXIS_ROLL:
+      Serial.print("Roll: ");
+      Serial.println(r, 2);
+      break;
+    case AXIS_PITCH:
+      Serial.print("Pitch: ");
+      Serial.println(p, 2);
+      break;
+    default:
+      Serial.print("Roll: ");
+      Serial.print(r, 2);
+      Serial.print("  Pitch: ");
+      Serial.println(p, 2);
+      break;
   }
 
   ui_roll  = r;
@@ -263,17 +266,14 @@ void handleSerial() {
   switch (c) {
     case 'z': setZeroReference(); break;
     case 'c': calibrateOffsets(); initializeAngles(); break;
+    case 'C': runAlignmentCalibration(); break;
     case 'u': setOrientation(MODE_SCREEN_UP); break;
     case 'v': setOrientation(MODE_SCREEN_VERTICAL); break;
-    case 'i': toggleIncidence(); break;
-    case 'A': runAlignmentCalibration(); break;
+    case 'm': cycleMode(); break;
+    case 'a': cycleAxisMode(); break;
+    case 'r': toggleRotation(); break;
+
   }
-  // if (c=='z') setZeroReference();
-  // if (c=='c') { calibrateOffsets(); initializeAngles(); }
-  // if (c=='u') setOrientation(MODE_SCREEN_UP);
-  // if (c=='v') setOrientation(MODE_SCREEN_VERTICAL);
-  // if (c=='i') toggleIncidence();
-  // if (c=='A') runAlignmentCalibration();
 }
 
 // ============================================================
@@ -434,12 +434,6 @@ void setOrientation(OrientationMode m) {
 
   calibrateOffsets();
   initializeAngles();
-}
-
-void toggleIncidence() {
-  incidenceMode=!incidenceMode;
-  EEPROM.write(EEPROM_ADDR_INCIDENCE,incidenceMode);
-  EEPROM.commit();
 }
 
 void toggleRotation() {

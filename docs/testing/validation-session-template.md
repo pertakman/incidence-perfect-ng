@@ -58,4 +58,4 @@ Tester: Per Takman
 ## Sign-off
 
 - Baseline status: IN PROGRESS
-- Next action: Confirm remaining serial/UI status behavior and then finalize baseline sign-off.
+- Next action: Validate new `MODE` button behavior (`RP` <-> `INC`) and re-run quick sweep for T10/T11/T15/T17.
