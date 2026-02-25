@@ -86,6 +86,16 @@ float roll_zero=0, pitch_zero=0;
 // Timekeeping for gyro integration
 unsigned long lastTime=0; // ms
 
+// Forward declarations (required now that this file is compiled as C++)
+void calibrateOffsets();
+void initializeAngles();
+void printMode();
+void handleSerial();
+void toggleIncidence();
+void runAlignmentCalibration();
+void captureAngles(float& r, float& p);
+bool waitForC(unsigned long timeout_ms);
+
 // ============================================================
 // AXIS REMAPPING  (FROZEN v4.0 BEHAVIOR)
 // ============================================================

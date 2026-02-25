@@ -1,6 +1,9 @@
 #include "ui_lvgl.h"
 #include "inclinometer_shared.h"
 
+void setup_inclinometer();
+void loop_inclinometer();
+
 void setup()
 {
   setup_display();
