@@ -116,6 +116,30 @@ static lv_obj_t *label_btn_mode;
 static lv_obj_t *label_btn_align;
 static lv_obj_t *label_btn_rotate;
 
+static const char *axis_mode_text()
+{
+  switch (axis_mode) {
+    case AXIS_ROLL:  return "ROLL";
+    case AXIS_PITCH: return "PITCH";
+    default:         return "BOTH";
+  }
+}
+
+static void update_status_label()
+{
+  static char last[40] = "";
+  char buf[40];
+  const char *orientation_text =
+    (orientationMode == MODE_SCREEN_VERTICAL) ? "SCREEN VERTICAL" : "SCREEN UP";
+  snprintf(buf, sizeof(buf), "%s | %s", orientation_text, axis_mode_text());
+
+  if (strcmp(buf, last) != 0) {
+    lv_label_set_text(label_mode, buf);
+    strncpy(last, buf, sizeof(last) - 1);
+    last[sizeof(last) - 1] = '\0';
+  }
+}
+
 // ============================================================
 // FILTERING / COLORS
 // ============================================================
@@ -189,6 +213,8 @@ static void apply_axis_layout()
       lv_obj_align(pitch_grp, LV_ALIGN_CENTER, 0, READOUT_Y);
       break;
   }
+
+  update_status_label();
 }
 
 static void apply_ui_state()
@@ -196,6 +222,7 @@ static void apply_ui_state()
   switch (ui_state) {
 
     case UI_STATE_NORMAL:
+      lv_obj_clear_flag(label_mode, LV_OBJ_FLAG_HIDDEN);
       lv_obj_add_flag(label_header, LV_OBJ_FLAG_HIDDEN);
       lv_obj_add_flag(instr_grp,    LV_OBJ_FLAG_HIDDEN);
 
@@ -210,6 +237,7 @@ static void apply_ui_state()
       break;
 
     case UI_STATE_ALIGN_CAPTURE:
+      lv_obj_add_flag(label_mode, LV_OBJ_FLAG_HIDDEN);
       lv_label_set_text(label_header, "ALIGNMENT");
       lv_obj_clear_flag(label_header, LV_OBJ_FLAG_HIDDEN);
 
@@ -231,6 +259,7 @@ static void apply_ui_state()
       break;
 
     case UI_STATE_ALIGN_DONE:
+      lv_obj_add_flag(label_mode, LV_OBJ_FLAG_HIDDEN);
       lv_label_set_text(
         label_instruction,
         "Alignment captured\nPress DONE to continue"
@@ -319,7 +348,7 @@ static void create_ui()
 
   // Persistent context (Orientation | Axis)
   label_mode = lv_label_create(scr);
-  lv_label_set_text(label_mode, "SCREEN UP | BOTH"); // placeholder
+  lv_label_set_text(label_mode, "");
   lv_obj_set_style_text_font(label_mode, &lv_font_montserrat_24, 0);
   lv_obj_set_style_text_color(label_mode, lv_color_hex(0xC0C0C0), 0);
   lv_obj_align(label_mode, LV_ALIGN_TOP_LEFT, 2, 2); // Changed to 2 from 6
@@ -337,21 +366,27 @@ static void create_ui()
   // ==========================================================
 
   instr_grp = lv_obj_create(scr);
-  lv_obj_set_width(instr_grp, lv_pct(90));
+  lv_obj_set_width(instr_grp, lv_pct(96));
   lv_obj_align(instr_grp, LV_ALIGN_CENTER, 0, -10);
   lv_obj_set_flex_flow(instr_grp, LV_FLEX_FLOW_COLUMN);
+  lv_obj_set_flex_align(instr_grp,
+                        LV_FLEX_ALIGN_CENTER,
+                        LV_FLEX_ALIGN_CENTER,
+                        LV_FLEX_ALIGN_CENTER);
 
-  lv_obj_set_style_bg_opa(instr_grp, LV_OPA_TRANSP, 0);
+  lv_obj_set_style_bg_color(instr_grp, lv_color_black(), 0);
+  lv_obj_set_style_bg_opa(instr_grp, LV_OPA_80, 0);
   lv_obj_set_style_border_width(instr_grp, 0, 0);
-  lv_obj_set_style_pad_all(instr_grp, 0, 0);
+  lv_obj_set_style_pad_all(instr_grp, 12, 0);
 
   lv_obj_clear_flag(instr_grp, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_set_scrollbar_mode(instr_grp, LV_SCROLLBAR_MODE_OFF);
 
   label_instruction = lv_label_create(instr_grp);
+  lv_obj_set_width(label_instruction, lv_pct(100));
   lv_label_set_text(label_instruction, "");
   lv_label_set_long_mode(label_instruction, LV_LABEL_LONG_WRAP);
-  lv_obj_set_style_text_font(label_instruction, &lv_font_montserrat_24, 0);
+  lv_obj_set_style_text_font(label_instruction, &lv_font_montserrat_28, 0);
   lv_obj_set_style_text_color(label_instruction, lv_color_hex(0xE0E0E0), 0);
   lv_obj_set_style_text_align(label_instruction, LV_TEXT_ALIGN_CENTER, 0);
 
@@ -512,6 +547,7 @@ static void update_ui()
 
   ui_roll_smooth  = smooth_value(ui_roll_smooth,  ui_roll);
   ui_pitch_smooth = smooth_value(ui_pitch_smooth, ui_pitch);
+  update_status_label();
 
   char buf[16];
 
@@ -572,6 +608,7 @@ void setup_display()
 
   create_ui();
   apply_ui_state();
+  update_status_label();
 }
 
 void loop_display()

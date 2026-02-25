@@ -29,6 +29,7 @@ This repo is now configured as a PlatformIO project for VS Code.
 - LVGL config lives at `config/lvgl/lv_conf.h` and is wired via build flags in `platformio.ini`.
 - Hardware setup notes and reference image are under `docs/hardware/`.
 - Architecture notes are under `docs/architecture/`.
+- Validation checklists are under `docs/testing/`.
 - Current dependency pins in `platformio.ini`:
   - `lvgl/lvgl @ ^8.4.0`
   - `moononournation/GFX Library for Arduino @ 1.3.8`
@@ -40,3 +41,4 @@ This repo is now configured as a PlatformIO project for VS Code.
 - `config/lvgl/`: LVGL configuration (`lv_conf.h`)
 - `docs/hardware/`: board setup references
 - `docs/architecture/`: design notes and diagrams
+- `docs/testing/`: hardware validation workflow and test logs

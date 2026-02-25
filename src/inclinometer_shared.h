@@ -12,6 +12,8 @@ enum OrientationMode {
   MODE_SCREEN_VERTICAL = 1
 };
 
+extern OrientationMode orientationMode;
+
 // Forward declarations used across files
 void setOrientation(OrientationMode m);
 

@@ -85,6 +85,7 @@ float roll_zero=0, pitch_zero=0;
 
 // Timekeeping for gyro integration
 unsigned long lastTime=0; // ms
+bool serialWasAttached = false;
 
 // Forward declarations (required now that this file is compiled as C++)
 void calibrateOffsets();
@@ -173,6 +174,7 @@ void setup_inclinometer() {
   initializeAngles();
 
   printMode();
+  serialWasAttached = (bool)Serial;
 
   lastTime = millis();
 }
@@ -182,6 +184,13 @@ void setup_inclinometer() {
 // ============================================================
 
 void loop_inclinometer() {
+  // Print mode once whenever USB serial transitions from detached to attached.
+  bool serialNow = (bool)Serial;
+  if (serialNow && !serialWasAttached) {
+    printMode();
+  }
+  serialWasAttached = serialNow;
+
   QMI8658_Data d;
   if (!imu.readSensorData(d)) return;
 
