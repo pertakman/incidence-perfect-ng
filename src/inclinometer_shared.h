@@ -13,6 +13,7 @@ enum OrientationMode {
 };
 
 extern OrientationMode orientationMode;
+extern bool displayRotated;
 
 // Forward declarations used across files
 void setOrientation(OrientationMode m);

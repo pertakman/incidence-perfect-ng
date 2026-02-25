@@ -3,7 +3,7 @@
 Date: 2026-02-25
 Firmware commit: f8d4586 (plus local uncommitted fixes for T02/T08/T09/T14)
 Board: ESP32-S3 1.91in AMOLED dev board (240x536)
-Tester: User
+Tester: Per Takman
 
 ## Environment
 

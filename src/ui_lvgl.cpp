@@ -56,6 +56,7 @@ extern void touch_read_cb(lv_indev_drv_t *drv, lv_indev_data_t *data);
 static lv_disp_draw_buf_t draw_buf;
 static lv_color_t *buf1;
 static lv_color_t *buf2;
+static lv_disp_t *disp_handle = nullptr;
 
 // ============================================================
 // UI STATE MACHINE
@@ -131,7 +132,10 @@ static void update_status_label()
   char buf[40];
   const char *orientation_text =
     (orientationMode == MODE_SCREEN_VERTICAL) ? "SCREEN VERTICAL" : "SCREEN UP";
-  snprintf(buf, sizeof(buf), "%s | %s", orientation_text, axis_mode_text());
+  snprintf(buf, sizeof(buf), "%s | %s | ROT %d",
+           orientation_text,
+           axis_mode_text(),
+           displayRotated ? 180 : 0);
 
   if (strcmp(buf, last) != 0) {
     lv_label_set_text(label_mode, buf);
@@ -284,7 +288,6 @@ static void ui_set_state(ui_state_t new_state)
 // ============================================================
 
 void cycleMode(void)      {}
-void toggleRotation(void){}
 
 // ============================================================
 // BUTTON CALLBACKS
@@ -595,7 +598,12 @@ void setup_display()
   disp_drv.ver_res = LCD_HEIGHT;
   disp_drv.flush_cb = my_disp_flush;
   disp_drv.draw_buf = &draw_buf;
-  lv_disp_drv_register(&disp_drv);
+  disp_drv.sw_rotate = 1;
+  disp_handle = lv_disp_drv_register(&disp_drv);
+  lv_disp_set_rotation(
+    disp_handle,
+    displayRotated ? LV_DISP_ROT_180 : LV_DISP_ROT_NONE
+  );
 
   // ==========================================================
   // TOUCH INPUT DEVICE (LVGL)
@@ -615,8 +623,19 @@ void loop_display()
 {
   static uint32_t last_tick = 0;
   static uint32_t last_ui   = 0;
+  static bool last_rotation = displayRotated;
 
   uint32_t now = millis();
+
+  if (last_rotation != displayRotated) {
+    if (disp_handle) {
+      lv_disp_set_rotation(
+        disp_handle,
+        displayRotated ? LV_DISP_ROT_180 : LV_DISP_ROT_NONE
+      );
+    }
+    last_rotation = displayRotated;
+  }
 
   if (now - last_tick >= 5) {
     lv_tick_inc(5);

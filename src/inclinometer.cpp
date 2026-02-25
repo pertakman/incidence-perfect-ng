@@ -47,6 +47,7 @@
 #define EEPROM_SIZE 128
 #define EEPROM_ADDR_MODE       0
 #define EEPROM_ADDR_INCIDENCE  1
+#define EEPROM_ADDR_ROTATION   2
 #define EEPROM_ADDR_ALIGN      16   // stores: align_roll, align_pitch (floats)
 
 // Complementary filter coefficient
@@ -68,6 +69,7 @@ QMI8658 imu;
 
 OrientationMode orientationMode;
 bool incidenceMode = false;
+bool displayRotated = false;
 
 // Sensor bias offsets (tool frame, SI units)
 float ax_off=0, ay_off=0, az_off=0;
@@ -151,6 +153,7 @@ void setup_inclinometer() {
   if (orientationMode > MODE_SCREEN_VERTICAL)
     orientationMode = MODE_SCREEN_UP;
   incidenceMode   = EEPROM.read(EEPROM_ADDR_INCIDENCE);
+  displayRotated = EEPROM.read(EEPROM_ADDR_ROTATION) ? true : false;
   EEPROM.get(EEPROM_ADDR_ALIGN,     align_roll);
   EEPROM.get(EEPROM_ADDR_ALIGN + 4, align_pitch);
 
@@ -437,6 +440,14 @@ void toggleIncidence() {
   incidenceMode=!incidenceMode;
   EEPROM.write(EEPROM_ADDR_INCIDENCE,incidenceMode);
   EEPROM.commit();
+}
+
+void toggleRotation() {
+  displayRotated = !displayRotated;
+  EEPROM.write(EEPROM_ADDR_ROTATION, displayRotated ? 1 : 0);
+  EEPROM.commit();
+  Serial.print("Display rotation: ");
+  Serial.println(displayRotated ? "180" : "0");
 }
 
 void printMode() {
