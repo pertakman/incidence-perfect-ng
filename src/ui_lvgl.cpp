@@ -152,6 +152,11 @@ static const char *orientation_text_for(OrientationMode m)
   return (m == MODE_SCREEN_VERTICAL) ? "SCREEN VERTICAL" : "SCREEN UP";
 }
 
+static const char *orientation_instruction_text_for(OrientationMode m)
+{
+  return (m == MODE_SCREEN_VERTICAL) ? "screen vertically" : "screen facing up";
+}
+
 static void process_mode_pending()
 {
   // MODE workflow is owned by inclinometer.cpp and mirrored here.
@@ -198,7 +203,7 @@ static void update_boot_hint_label()
   }
 
   if (ui_state == UI_STATE_MODE) {
-    const char *target_text = orientation_text_for(modeWorkflowTarget());
+    const char *target_text = orientation_instruction_text_for(modeWorkflowTarget());
     if (!modeWorkflowIsConfirmed()) {
       if (bootHoldIsActive()) {
         const unsigned long hold_ms = bootHoldDurationMs();
@@ -213,7 +218,7 @@ static void update_boot_hint_label()
           progress_pct = 100;
         }
       } else {
-        snprintf(buf, sizeof(buf), "Position with %s", target_text);
+        snprintf(buf, sizeof(buf), "Reposition with %s", target_text);
       }
     } else {
       const float rem = modeWorkflowRemainingSeconds();
@@ -572,7 +577,7 @@ static void create_ui()
   lv_obj_align(label_boot_hint, LV_ALIGN_TOP_MID, 0, 0);
 
   boot_hint_progress = lv_bar_create(boot_hint_box);
-  lv_obj_set_size(boot_hint_progress, lv_pct(94), 4);
+  lv_obj_set_size(boot_hint_progress, lv_pct(72), 5);
   lv_obj_align(boot_hint_progress, LV_ALIGN_BOTTOM_MID, 0, 0);
   lv_bar_set_range(boot_hint_progress, 0, 100);
   lv_bar_set_value(boot_hint_progress, 0, LV_ANIM_OFF);
