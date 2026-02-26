@@ -116,6 +116,7 @@ Examples:
     - firmware header `src/splash_image_536x240_rgb565.h`
 - Architecture notes are under `docs/architecture/`.
 - Validation checklists are under `docs/testing/`.
+- End-user manual is under `docs/manual/`.
 - Current dependency pins in `platformio.ini`:
   - `lvgl/lvgl @ ^8.4.0`
   - `moononournation/GFX Library for Arduino @ 1.3.8`

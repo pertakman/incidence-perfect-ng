@@ -13,3 +13,11 @@
 *.log
 *.tmp
 *.bak
+Thumbs.db
+.DS_Store
+
+# Local toolchain downloads (manual PDF pipeline)
+tools/
+
+# Manual build artifacts
+docs/manual/dist/
