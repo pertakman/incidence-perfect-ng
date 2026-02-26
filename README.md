@@ -162,11 +162,12 @@ Examples:
   - `docs/testing/validation-session-template.md` updated with expanded current test matrix.
 
 4. Connectivity exploration
-- Status: Open
-- Investigate smartphone connectivity options:
-  - native app approach
-  - lightweight web UI approach (served page or companion bridge)
-- Define minimum viable remote UI scope (read-only telemetry first, then optional control actions).
+- Status: Planned
+- Decision:
+  - prioritize device-hosted web UI for phone browser access (no app-store dependency)
+  - support both peer-to-peer AP mode and local-network STA mode
+- Implementation plan:
+  - see `docs/architecture/remote-control-plan.md`
 
 5. Release/versioning
 - Status: Done
