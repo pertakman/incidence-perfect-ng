@@ -1,0 +1,82 @@
+@page {
+  size: A4;
+  margin: 20mm 18mm 20mm 18mm;
+}
+
+body {
+  font-family: "Segoe UI", Arial, sans-serif;
+  line-height: 1.45;
+  color: #0f172a;
+}
+
+header#title-block-header {
+  display: none;
+}
+
+.cover-page {
+  min-height: 250mm;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  break-after: page;
+  page-break-after: always;
+}
+
+.cover-inner h1 {
+  font-size: 40px;
+  margin: 0;
+  letter-spacing: 0.4px;
+}
+
+.cover-inner h2 {
+  font-size: 20px;
+  margin: 8px 0 20px 0;
+  color: #334155;
+  font-weight: 600;
+}
+
+.cover-image {
+  width: 100%;
+  max-width: 600px;
+  border-radius: 10px;
+  box-shadow: 0 8px 28px rgba(2, 6, 23, 0.28);
+  margin: 6px 0 14px 0;
+}
+
+.cover-meta {
+  margin: 3px 0;
+  font-size: 13px;
+  color: #334155;
+}
+
+nav#TOC {
+  break-after: page;
+  page-break-after: always;
+}
+
+nav#TOC::before {
+  content: "Table of Contents";
+  display: block;
+  font-size: 30px;
+  font-weight: 700;
+  margin: 0 0 14px 0;
+  color: #0f172a;
+}
+
+nav#TOC > ul {
+  margin-top: 12px;
+}
+
+nav#TOC a,
+nav#TOC a:visited,
+nav#TOC a:hover,
+nav#TOC a:active {
+  color: #0f172a;
+  text-decoration: none;
+}
+
+h1, h2, h3 {
+  break-after: avoid;
+  page-break-after: avoid;
+}

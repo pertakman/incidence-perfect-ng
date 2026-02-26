@@ -117,10 +117,18 @@ Examples:
 - Architecture notes are under `docs/architecture/`.
 - Validation checklists are under `docs/testing/`.
 - End-user manual is under `docs/manual/`.
+  - Build outputs: `docs/manual/dist/` (ignored)
+  - Curated release PDFs: `docs/manual/releases/` (tracked)
 - Current dependency pins in `platformio.ini`:
   - `lvgl/lvgl @ ^8.4.0`
   - `moononournation/GFX Library for Arduino @ 1.3.8`
   - `file://C:/dev/Arduino/Libraries/QMI8658`
+
+## License
+
+- Code license: MIT (`LICENSE`)
+- Legal notes and scope details: `docs/legal/README.md`
+- Third-party manuals/libraries keep their own original licenses/terms
 
 ## Repository layout
 

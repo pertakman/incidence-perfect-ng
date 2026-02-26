@@ -1,7 +1,11 @@
 param(
     [string]$ManualPath = "docs/manual/user-manual.md",
     [string]$OutDir = "docs/manual/dist",
-    [string]$ToolsDir = "tools"
+    [string]$ToolsDir = "tools",
+    [switch]$PublishRelease,
+    [string]$ReleaseDir = "docs/manual/releases",
+    [string]$CoverTemplatePath = "docs/manual/cover-template.html",
+    [string]$CssPath = "docs/manual/manual.css"
 )
 
 $ErrorActionPreference = "Stop"
@@ -69,6 +73,8 @@ $pandoc = Join-Path $ToolsDir "pandoc\\pandoc.exe"
 if (-not (Test-Path $pandoc)) { throw "pandoc not found at $pandoc" }
 $browser = Get-BrowserExe
 if (-not $browser) { throw "No Chrome/Edge browser found for headless PDF rendering." }
+if (-not (Test-Path $CoverTemplatePath)) { throw "cover template not found at $CoverTemplatePath" }
+if (-not (Test-Path $CssPath)) { throw "manual CSS not found at $CssPath" }
 
 $src = (Get-Content $ManualPath -Raw)
 $src = $src.Replace("{{FW_VERSION}}", $fw)
@@ -93,19 +99,37 @@ if ($coverPath -and (Test-Path $coverPath)) {
 $outMd = Join-Path $OutDir ("Incidence-Perfect-NG-Manual-$fw.md")
 $outHtml = Join-Path $OutDir ("Incidence-Perfect-NG-Manual-$fw.html")
 $outPdf = Join-Path $OutDir ("Incidence-Perfect-NG-Manual-$fw.pdf")
+$coverOut = Join-Path $OutDir "cover.png"
+$coverInclude = Join-Path $OutDir "cover.generated.html"
 
 Set-Content -Path $outMd -Value $src -Encoding UTF8
+
+$coverTemplate = Get-Content $CoverTemplatePath -Raw
+$coverTemplate = $coverTemplate.Replace("{{COVER_IMAGE}}", "cover.png")
+$coverTemplate = $coverTemplate.Replace("{{FW_VERSION}}", $fw)
+$coverTemplate = $coverTemplate.Replace("{{MANUAL_DATE}}", $date)
+$coverTemplate = $coverTemplate.Replace("{{GIT_DESCRIBE}}", $rev)
+Set-Content -Path $coverInclude -Value $coverTemplate -Encoding UTF8
 
 Write-Output "[manual] md: $outMd"
 Write-Output "[manual] html: $outHtml"
 Write-Output "[manual] pdf: $outPdf"
 
-& $pandoc $outMd -o $outHtml --standalone --toc --metadata title="Incidence Perfect NG" --metadata date="$date" --resource-path="$outDirAbs"
+$cssAbs = (Resolve-Path $CssPath).Path
+$coverIncludeAbs = (Resolve-Path $coverInclude).Path
+& $pandoc $outMd -o $outHtml --standalone --toc --toc-depth=2 --metadata title="Incidence Perfect NG" --metadata date="$date" --resource-path="$outDirAbs" --css="$cssAbs" --include-before-body="$coverIncludeAbs"
 
 $htmlAbs = (Resolve-Path $outHtml).Path
 $htmlUri = "file:///" + ($htmlAbs.Replace('\', '/'))
 $pdfAbs = (Resolve-Path (Split-Path $outPdf -Parent)).Path + "\" + (Split-Path $outPdf -Leaf)
 
-& $browser "--headless=new" "--disable-gpu" "--allow-file-access-from-files" "--print-to-pdf=$pdfAbs" $htmlUri | Out-Null
+& $browser "--headless=new" "--disable-gpu" "--allow-file-access-from-files" "--export-tagged-pdf" "--print-to-pdf=$pdfAbs" $htmlUri | Out-Null
 
 Write-Output "[manual] done"
+
+if ($PublishRelease) {
+    New-Item -ItemType Directory -Force -Path $ReleaseDir | Out-Null
+    $releasePdf = Join-Path $ReleaseDir (Split-Path $outPdf -Leaf)
+    Copy-Item -Force $outPdf $releasePdf
+    Write-Output "[manual] release pdf: $releasePdf"
+}

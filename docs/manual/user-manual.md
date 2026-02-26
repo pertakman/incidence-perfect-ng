@@ -1,13 +1,4 @@
-﻿# Incidence Perfect NG
-## User Manual (Beta)
-
-![Incidence Perfect NG splash](../assets/splash-screens/device/splash_screen_OLED_optimized_2_536x240.png)
-
 Incidence Perfect NG is a compact 2-axis inclinometer/incidence meter built around an ESP32-S3 + AMOLED touchscreen. It measures **roll** and **pitch** and provides guided workflows for **ZERO**, **MODE**, **ROTATE**, and **ALIGN**.
-
-**This manual is generated for firmware:** `{{FW_VERSION}}`  
-**Manual build date:** `{{MANUAL_DATE}}`  
-**Firmware source revision:** `{{GIT_DESCRIBE}}`
 
 > Beta note: This manual describes the current firmware behavior. If something differs on your device, report the **firmware version shown on the splash screen**.
 
@@ -193,4 +184,13 @@ For reference bring-up settings (Arduino IDE), see:
 ## Authorship
 
 This firmware and UI were developed by **Per Takman**, with assistance from **OpenAI Codex (Codex CLI)**.
+
+---
+
+## License And Warranty
+
+- The project source code is released under the MIT License.
+- The software is provided "AS IS", without warranty of any kind.
+- Third-party manuals, schematics, and library dependencies remain under their respective original licenses/terms.
+
 

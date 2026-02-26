@@ -19,4 +19,19 @@ Output:
 Notes:
 
 - The pipeline uses local `pandoc` from `tools/` and headless Chrome/Edge for PDF rendering.
-- Splash cover image is embedded from the generated `dist/cover.png`.
+- Cover page is injected from `docs/manual/cover-template.html`.
+- Print styling is controlled by `docs/manual/manual.css`.
+- Splash cover image is embedded from generated `docs/manual/dist/cover.png`.
+- `docs/manual/dist/` is build output and stays ignored in git.
+
+## Publish A Tracked Release PDF
+
+Use this to copy the generated PDF into the tracked release folder:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\build_manual_pdf.ps1 -PublishRelease
+```
+
+Output:
+
+- `docs/manual/releases/Incidence-Perfect-NG-Manual-<FW_VERSION>.pdf`
