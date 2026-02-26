@@ -36,6 +36,7 @@
 #include <math.h>
 #include <lvgl.h>
 #include "inclinometer_shared.h"
+#include "fw_version.h"
 
 // ============================================================
 // CONFIGURATION
@@ -206,7 +207,8 @@ void setup_inclinometer() {
   EEPROM.get(EEPROM_ADDR_ALIGN,     align_roll);
   EEPROM.get(EEPROM_ADDR_ALIGN + 4, align_pitch);
 
-  Serial.println("\nQMI8658 Inclinometer v4.2 (LOCKED)");
+  Serial.print("\nQMI8658 Inclinometer FW ");
+  Serial.println(FW_VERSION);
   Serial.println("BOOT button mapped to GPIO0 (active-low)");
 
   // IMU configuration (kept intentionally conservative)
@@ -569,7 +571,9 @@ void alignmentStart(void) {
   alignState.p_bd = 0.0f;
   alignState.p_td = 0.0f;
 
-  Serial.println("\nALIGNMENT v4.2 (6 ORIENTATIONS)");
+  Serial.print("\nALIGNMENT FW ");
+  Serial.print(FW_VERSION);
+  Serial.println(" (6 ORIENTATIONS)");
   printAlignmentInstruction();
 }
 

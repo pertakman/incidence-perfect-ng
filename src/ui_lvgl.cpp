@@ -6,7 +6,10 @@
 #include "ui_lvgl.h"
 #include <Arduino_GFX_Library.h>
 #include "inclinometer_shared.h"
+#include "fw_version.h"
+#include "splash_image_536x240_rgb565.h"
 #include <math.h>
+#include <string.h>
 #include "touch_bsp.h"
 
 // ============================================================
@@ -58,6 +61,29 @@ static lv_color_t *buf1;
 static lv_color_t *buf2;
 static lv_disp_t *disp_handle = nullptr;
 
+static void show_startup_splash()
+{
+  gfx->draw16bitRGBBitmap(0, 0, (uint16_t *)SPLASH_IMAGE_536x240_RGB565, LCD_WIDTH, LCD_HEIGHT);
+
+  const int text_size = 2;
+  const int char_w = 6 * text_size;
+  const int char_h = 8 * text_size;
+  const int margin_r = 12;
+  const int margin_b = 10;
+  const int text_w = (int)strlen(FW_VERSION) * char_w;
+  const int text_h = char_h;
+  const int text_x = LCD_WIDTH - margin_r - text_w;
+  const int text_y = LCD_HEIGHT - margin_b - text_h;
+
+  gfx->fillRect(text_x - 6, text_y - 4, text_w + 12, text_h + 8, 0x0000);
+  gfx->setTextSize(text_size);
+  gfx->setTextColor(0xFFFF);
+  gfx->setCursor(text_x, text_y);
+  gfx->print(FW_VERSION);
+
+  delay(1500);
+}
+
 // ============================================================
 // UI STATE MACHINE
 // ============================================================
@@ -82,6 +108,7 @@ static lv_obj_t *label_mode;
 static lv_obj_t *label_header;
 static lv_obj_t *boot_hint_box;
 static lv_obj_t *label_boot_hint;
+static lv_obj_t *boot_hint_progress;
 
 // Instruction group
 static lv_obj_t *instr_grp;
@@ -161,9 +188,11 @@ static void update_boot_hint_label()
   static char last[96] = "";
   char buf[96] = "";
   const uint32_t now_ms = millis();
+  int progress_pct = -1;
 
   if (ui_state == UI_STATE_ALIGN) {
     lv_obj_add_flag(boot_hint_box, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(boot_hint_progress, LV_OBJ_FLAG_HIDDEN);
     last[0] = '\0';
     return;
   }
@@ -178,8 +207,10 @@ static void update_boot_hint_label()
           snprintf(buf, sizeof(buf),
                    "BOOT: Release=CONFIRM | CANCEL in %.1fs",
                    to_cancel);
+          progress_pct = (int)((hold_ms * 100UL) / 1200UL);
         } else {
           snprintf(buf, sizeof(buf), "BOOT: Release=CANCEL");
+          progress_pct = 100;
         }
       } else {
         snprintf(buf, sizeof(buf), "Position with %s", target_text);
@@ -196,6 +227,7 @@ static void update_boot_hint_label()
     snprintf(buf, sizeof(buf), "ZERO APPLIED - hold still briefly");
   } else if (!bootHoldIsActive()) {
     lv_obj_add_flag(boot_hint_box, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(boot_hint_progress, LV_OBJ_FLAG_HIDDEN);
     last[0] = '\0';
     return;
   }
@@ -209,12 +241,15 @@ static void update_boot_hint_label()
       snprintf(buf, sizeof(buf),
                "Release: FREEZE | AXIS in %.1fs",
                to_axis);
+      progress_pct = (int)((hold_ms * 100UL) / 2200UL);
     } else if (hold_ms < 2200) {
       snprintf(buf, sizeof(buf),
                "Release: AXIS | MODE in %.1fs",
                to_mode);
+      progress_pct = (int)((hold_ms * 100UL) / 2200UL);
     } else {
       snprintf(buf, sizeof(buf), "Release: MODE");
+      progress_pct = 100;
     }
   }
 
@@ -222,6 +257,14 @@ static void update_boot_hint_label()
     lv_label_set_text(label_boot_hint, buf);
     strncpy(last, buf, sizeof(last) - 1);
     last[sizeof(last) - 1] = '\0';
+  }
+
+  if (progress_pct >= 0) {
+    if (progress_pct > 100) progress_pct = 100;
+    lv_bar_set_value(boot_hint_progress, progress_pct, LV_ANIM_OFF);
+    lv_obj_clear_flag(boot_hint_progress, LV_OBJ_FLAG_HIDDEN);
+  } else {
+    lv_obj_add_flag(boot_hint_progress, LV_OBJ_FLAG_HIDDEN);
   }
   lv_obj_clear_flag(boot_hint_box, LV_OBJ_FLAG_HIDDEN);
 }
@@ -510,7 +553,7 @@ static void create_ui()
   lv_obj_add_flag(label_header, LV_OBJ_FLAG_HIDDEN);
 
   boot_hint_box = lv_obj_create(scr);
-  lv_obj_set_size(boot_hint_box, lv_pct(96), 30);
+  lv_obj_set_size(boot_hint_box, lv_pct(96), 34);
   lv_obj_align(boot_hint_box, LV_ALIGN_BOTTOM_MID, 0, -68);
   lv_obj_set_style_bg_color(boot_hint_box, lv_color_black(), 0);
   lv_obj_set_style_bg_opa(boot_hint_box, LV_OPA_80, 0);
@@ -526,7 +569,20 @@ static void create_ui()
   lv_obj_set_style_text_align(label_boot_hint, LV_TEXT_ALIGN_CENTER, 0);
   lv_label_set_long_mode(label_boot_hint, LV_LABEL_LONG_WRAP);
   lv_obj_set_width(label_boot_hint, lv_pct(98));
-  lv_obj_center(label_boot_hint);
+  lv_obj_align(label_boot_hint, LV_ALIGN_TOP_MID, 0, 0);
+
+  boot_hint_progress = lv_bar_create(boot_hint_box);
+  lv_obj_set_size(boot_hint_progress, lv_pct(94), 4);
+  lv_obj_align(boot_hint_progress, LV_ALIGN_BOTTOM_MID, 0, 0);
+  lv_bar_set_range(boot_hint_progress, 0, 100);
+  lv_bar_set_value(boot_hint_progress, 0, LV_ANIM_OFF);
+  lv_obj_set_style_bg_color(boot_hint_progress, lv_color_hex(0x3A3A3A), LV_PART_MAIN);
+  lv_obj_set_style_bg_opa(boot_hint_progress, LV_OPA_70, LV_PART_MAIN);
+  lv_obj_set_style_bg_color(boot_hint_progress, lv_color_hex(0x6FD3FF), LV_PART_INDICATOR);
+  lv_obj_set_style_bg_opa(boot_hint_progress, LV_OPA_90, LV_PART_INDICATOR);
+  lv_obj_set_style_radius(boot_hint_progress, 3, LV_PART_MAIN);
+  lv_obj_set_style_radius(boot_hint_progress, 3, LV_PART_INDICATOR);
+  lv_obj_add_flag(boot_hint_progress, LV_OBJ_FLAG_HIDDEN);
   lv_obj_add_flag(boot_hint_box, LV_OBJ_FLAG_HIDDEN);
 
   // ==========================================================
@@ -818,6 +874,7 @@ static void update_ui()
 void setup_display()
 {
   gfx->begin();
+  show_startup_splash();
   lv_init();
 
   Touch_Init();

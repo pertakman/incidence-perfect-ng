@@ -133,26 +133,42 @@ Examples:
 ## Backlog
 
 1. Beta hardening
-- Re-run full hardware validation on all beta units.
-- Confirm EEPROM persistence after repeated power cycles for orientation, rotation, alignment, and freeze behavior.
+- Status: Partial
+- Remaining:
+  - Re-run full hardware validation on all beta units.
+  - Confirm EEPROM persistence after repeated power cycles for orientation, rotation, alignment, and freeze behavior.
 
 2. UX and control polish
-- Tune BOOT hold hint readability (font size/placement/colors) based on field feedback.
-- Tune `MODE` guided workflow timing (`MODE_STILL_MS`, motion threshold) from real usage.
-- Add optional on-screen icon/progress indicator for BOOT long-press thresholds (short/long/very-long).
+- Status: Partial
+- Done:
+  - BOOT hold hint readability improved from field feedback.
+  - On-screen BOOT long-press progress indicator added for short/long/very-long thresholds.
+- Remaining:
+  - Tune `MODE` guided workflow timing (`MODE_STILL_MS`, motion threshold) from real usage.
 
 3. Documentation cleanup
-- Update `docs/testing/hardware-validation-checklist.md` to fully match current behavior (guided MODE and full ALIGN flow).
-- Update `docs/testing/validation-session-template.md` with current test matrix and remove stale references.
+- Status: Done
+- Completed:
+  - `docs/testing/hardware-validation-checklist.md` updated for guided MODE and full ALIGN flow.
+  - `docs/testing/validation-session-template.md` updated with expanded current test matrix.
 
 4. Connectivity exploration
+- Status: Open
 - Investigate smartphone connectivity options:
   - native app approach
   - lightweight web UI approach (served page or companion bridge)
 - Define minimum viable remote UI scope (read-only telemetry first, then optional control actions).
 
 5. Release/versioning
-- Adopt firmware version format `YYYY.M.X`.
-  - `YYYY` = year (for now `2026`)
-  - `M` = month number
-  - `X` = incremental build/release number within that month
+- Status: Done
+- Completed:
+  - Firmware version format `YYYY.M.X` adopted.
+  - Build-time auto version generation implemented.
+  - Optional override for release candidates via `FW_VERSION_OVERRIDE`.
+
+6. Beta release process
+- Status: Done
+- Completed:
+  - Added `docs/release/beta-checklist.md`.
+  - Added `docs/release/tester-handoff-note.md`.
+  - Added `docs/release/beta-version-and-tag-commands.md`.
