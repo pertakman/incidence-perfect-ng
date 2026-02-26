@@ -21,6 +21,7 @@ enum AxisDisplayMode {
 extern OrientationMode orientationMode;
 extern bool displayRotated;
 extern volatile AxisDisplayMode ui_axis_mode;
+AxisDisplayMode getAxisMode(void);
 
 // Forward declarations used across files
 void setOrientation(OrientationMode m);
@@ -48,3 +49,14 @@ void alignmentStart(void);
 void alignmentCancel(void);
 void alignmentCapture(void);
 void alignmentGetInstruction(char *buf, unsigned int buf_size);
+bool alignmentCaptureInProgress(void);
+float alignmentCaptureProgressPercent(void);
+void runQuickRecalibration(void);
+
+void recalibrationWorkflowStart(void);
+void recalibrationWorkflowConfirm(void);
+void recalibrationWorkflowCancel(void);
+bool recalibrationWorkflowIsActive(void);
+bool recalibrationWorkflowIsConfirmed(void);
+float recalibrationWorkflowRemainingSeconds(void);
+float recalibrationWorkflowProgressPercent(void);

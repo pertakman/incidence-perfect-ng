@@ -43,6 +43,7 @@ Use this before first-time flashing a new hardware unit.
 
 - `z`: set zero reference from current position
 - `c`: quick sensor recalibration (`calibrateOffsets()` + `initializeAngles()`) when not aligning; during alignment it captures the current step
+- `k`: start guided recalibration workflow (confirm with `c`, cancel with `x`)
 - `C`: start guided 6-step mechanical alignment workflow (shared by touch UI and serial)
 - `u`: start guided mode change targeting `SCREEN UP` (confirm with `c`, cancel with `x`)
 - `v`: start guided mode change targeting `SCREEN VERTICAL` (confirm with `c`, cancel with `x`)
@@ -72,6 +73,46 @@ Touch UI and serial now share the same MODE workflow state, so actions in one in
     - first `CONFIRM` starts stillness countdown,
     - mode change auto-applies after countdown completes,
     - `ZERO` or ACTION-button long-press cancels a pending mode change.
+
+## Remote Control (Phase A)
+
+Phone remote control is now available through a device-hosted web UI over Wi-Fi AP mode.
+
+How to connect:
+1. Power the device.
+2. Connect your phone to the device AP:
+   - SSID: `IncidencePerfectNG-XXXX` (last 4 hex from chip id)
+   - Password: `incidence-ng`
+3. Open browser and go to:
+   - `http://192.168.4.1`
+
+Available in Phase A:
+- Live readout (`ROLL`, `PITCH`, status line mirror)
+- Remote actions:
+  - `ZERO`
+  - `AXIS`
+  - `FREEZE`
+  - `ROTATE`
+  - `RECAL` (same as serial `c` when not in workflows)
+  - `MODE` start + `CONFIRM` + `CANCEL`
+  - `ALIGN` start + `CAPTURE` + `CANCEL`
+- Context-aware controls:
+  - `CONFIRM`/`CANCEL` are shown only during MODE workflow
+  - `CAPTURE`/`CANCEL` are shown only during ALIGN workflow
+- Progress bar:
+  - MODE hold-still progress
+  - ALIGN capture progress
+- Workflow sync is shared across touch, serial, ACTION button, and web.
+
+API endpoints:
+- `GET /api/state`
+- `POST /api/cmd` with JSON body: `{"cmd":"zero"|"axis"|"freeze"}`
+- `POST /api/cmd` with JSON body:
+  - `{"cmd":"zero"|"axis"|"freeze"|"rotate"}`
+  - `{"cmd":"recal"|"confirm"|"cancel"}` (`recal` opens guided recalibration workflow)
+  - `{"cmd":"mode_toggle"|"mode_up"|"mode_vertical"|"confirm"|"cancel"}`
+  - `{"cmd":"align_start"|"capture"}`
+- `GET /health`
 
 ### `c` vs `C`
 
@@ -162,12 +203,18 @@ Examples:
   - `docs/testing/validation-session-template.md` updated with expanded current test matrix.
 
 4. Connectivity exploration
-- Status: Planned
-- Decision:
-  - prioritize device-hosted web UI for phone browser access (no app-store dependency)
-  - support both peer-to-peer AP mode and local-network STA mode
-- Implementation plan:
-  - see `docs/architecture/remote-control-plan.md`
+- Status: Partial
+- Done:
+  - Phase A foundation implemented:
+    - AP mode phone access
+    - web UI + API telemetry/state
+    - remote commands (`zero`, `axis`, `freeze`)
+- Remaining:
+  - MODE/ALIGN remote command parity
+  - STA mode + hostname (`.local`) onboarding
+  - auth hardening and network test matrix
+- Plan document:
+  - `docs/architecture/remote-control-plan.md`
 
 5. Release/versioning
 - Status: Done

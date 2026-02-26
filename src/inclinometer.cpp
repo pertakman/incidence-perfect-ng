@@ -108,6 +108,24 @@ static float modeRefRoll = 0.0f;
 static float modeRefPitch = 0.0f;
 static const unsigned long modeStillMs = 1500;
 static const float modeMotionThreshDeg = 0.8f;
+static bool recalPending = false;
+static bool recalConfirmed = false;
+static unsigned long recalStartMs = 0;
+static float recalRefRoll = 0.0f;
+static float recalRefPitch = 0.0f;
+static bool recalSampling = false;
+static int recalSampleCount = 0;
+static const int recalSampleTarget = 125; // ~2.5 s at 20 ms loop
+static float recalSumAx = 0.0f;
+static float recalSumAy = 0.0f;
+static float recalSumAz = 0.0f;
+static float recalSumGx = 0.0f;
+static float recalSumGy = 0.0f;
+static float lastRawAx = 0.0f;
+static float lastRawAy = 0.0f;
+static float lastRawAz = 0.0f;
+static float lastRawGx = 0.0f;
+static float lastRawGy = 0.0f;
 
 enum AlignmentStep {
   ALIGN_SCREEN_UP = 0,
@@ -121,6 +139,7 @@ enum AlignmentStep {
 
 struct AlignmentWorkflowState {
   bool active;
+  bool awaitingRecal;
   AlignmentStep step;
   float r_up, p_up;
   float r_down, p_down;
@@ -132,22 +151,50 @@ struct AlignmentWorkflowState {
 
 static AlignmentWorkflowState alignState = {
   false,
+  false,
   ALIGN_SCREEN_UP,
   0, 0, 0, 0, 0, 0, 0, 0
 };
+
+struct AlignmentCaptureState {
+  bool active;
+  AlignmentStep step;
+  int settleTicksRemaining;
+  int sampleTarget;
+  int sampleCount;
+  float sumRoll;
+  float sumPitch;
+};
+
+static AlignmentCaptureState alignCaptureState = {
+  false,
+  ALIGN_SCREEN_UP,
+  0,
+  0,
+  0,
+  0.0f,
+  0.0f
+};
+
+static const int alignCaptureSettleTicks = 10;  // ~200 ms @ 20 ms loop
+static const int alignCaptureSampleTarget = 25; // ~500 ms @ 20 ms loop
 
 // Forward declarations (required now that this file is compiled as C++)
 void calibrateOffsets();
 void initializeAngles();
 void printMode();
 void handleSerial();
-void captureAngles(float& r, float& p);
 const char *alignmentStepText(AlignmentStep step);
 const char *alignmentStepHintText(AlignmentStep step);
 void printAlignmentInstruction();
 void finalizeAlignment();
 void handleBootButton();
 void processModeWorkflow();
+void processAlignmentCapture();
+void processRecalibrationWorkflow();
+void recalibrationWorkflowStart();
+void recalibrationWorkflowConfirm();
+void recalibrationWorkflowCancel();
 
 // ============================================================
 // AXIS REMAPPING  (FROZEN v4.0 BEHAVIOR)
@@ -259,6 +306,11 @@ void loop_inclinometer() {
   float ax, ay, az, gx, gy;
   remapAccel(d, ax, ay, az);
   remapGyro(d, gx, gy);
+  lastRawAx = ax;
+  lastRawAy = ay;
+  lastRawAz = az;
+  lastRawGx = gx;
+  lastRawGy = gy;
 
   // Remove sensor bias offsets
   ax -= ax_off; ay -= ay_off; az -= az_off;
@@ -292,9 +344,11 @@ void loop_inclinometer() {
   }
 
   processModeWorkflow();
+  processRecalibrationWorkflow();
+  processAlignmentCapture();
 
   // Output
-  if (!alignmentIsActive() && !modePending) {
+  if (!alignmentIsActive() && !modePending && !recalPending) {
     switch (ui_axis_mode) {
       case AXIS_ROLL:
         Serial.print("Roll: ");
@@ -334,13 +388,18 @@ void handleSerial() {
     case 'c':
       if (alignmentIsActive()) alignmentCapture();
       else if (modePending && !modeConfirmed) modeWorkflowConfirm();
-      else { calibrateOffsets(); initializeAngles(); }
+      else if (recalPending && !recalConfirmed) recalibrationWorkflowConfirm();
+      else { runQuickRecalibration(); }
       break;
     case 'C': alignmentStart(); break;
     case 'u': modeWorkflowStart(MODE_SCREEN_UP); break;
     case 'v': modeWorkflowStart(MODE_SCREEN_VERTICAL); break;
     case 'm': modeWorkflowStartToggle(); break;
-    case 'x': modeWorkflowCancel(); break;
+    case 'x':
+      modeWorkflowCancel();
+      recalibrationWorkflowCancel();
+      break;
+    case 'k': recalibrationWorkflowStart(); break;
     case 'a': cycleAxisMode(); break;
     case 'r': toggleRotation(); break;
 
@@ -358,37 +417,52 @@ void handleSerial() {
 //   - affect remapping or filter behavior
 //
 
-void captureAngles(float& r, float& p) {
-  const int N = 50;        // number of samples
-  const int dt_ms = 10;   // sample interval (~500 ms total)
-
-  float sr = 0;
-  float sp = 0;
-
-  // Allow system to settle
-  delay(200);
-
-  for (int i = 0; i < N; i++) {
-    sr += roll_phys;
-    sp += pitch_phys;
-    delay(dt_ms);
-  }
-
-  r = sr / N;
-  p = sp / N;
-}
-
 void alignmentCapture(void)
 {
   if (!alignState.active) {
     return;
   }
+  if (alignState.awaitingRecal) {
+    recalibrationWorkflowStart();
+    recalibrationWorkflowConfirm();
+    alignState.awaitingRecal = false;
+    alignState.active = false;
+    Serial.println("Alignment final recalibration started");
+    return;
+  }
+  if (alignCaptureState.active) {
+    return;
+  }
+  alignCaptureState.active = true;
+  alignCaptureState.step = alignState.step;
+  alignCaptureState.settleTicksRemaining = alignCaptureSettleTicks;
+  alignCaptureState.sampleTarget = alignCaptureSampleTarget;
+  alignCaptureState.sampleCount = 0;
+  alignCaptureState.sumRoll = 0.0f;
+  alignCaptureState.sumPitch = 0.0f;
+  Serial.println("Capturing...");
+}
 
-  float r = 0.0f;
-  float p = 0.0f;
-  captureAngles(r, p);
+void processAlignmentCapture() {
+  if (!alignCaptureState.active) return;
 
-  switch (alignState.step) {
+  if (alignCaptureState.settleTicksRemaining > 0) {
+    alignCaptureState.settleTicksRemaining--;
+    return;
+  }
+
+  alignCaptureState.sumRoll += roll_phys;
+  alignCaptureState.sumPitch += pitch_phys;
+  alignCaptureState.sampleCount++;
+
+  if (alignCaptureState.sampleCount < alignCaptureState.sampleTarget) return;
+
+  const float r = alignCaptureState.sumRoll / (float)alignCaptureState.sampleTarget;
+  const float p = alignCaptureState.sumPitch / (float)alignCaptureState.sampleTarget;
+  const AlignmentStep step = alignCaptureState.step;
+  alignCaptureState.active = false;
+
+  switch (step) {
     case ALIGN_SCREEN_UP:
       alignState.r_up = r;
       alignState.p_up = p;
@@ -414,18 +488,18 @@ void alignmentCapture(void)
   }
 
   Serial.print("Captured: ");
-  Serial.println(alignmentStepText(alignState.step));
+  Serial.println(alignmentStepText(step));
   Serial.print("  roll_phys=");
   Serial.print(r, 2);
   Serial.print("  pitch_phys=");
   Serial.println(p, 2);
 
-  if (alignState.step == ALIGN_TOP_EDGE_DOWN) {
+  if (step == ALIGN_TOP_EDGE_DOWN) {
     finalizeAlignment();
     return;
   }
 
-  alignState.step = (AlignmentStep)((int)alignState.step + 1);
+  alignState.step = (AlignmentStep)((int)step + 1);
   printAlignmentInstruction();
 }
 
@@ -482,8 +556,29 @@ void setOrientation(OrientationMode m) {
   initializeAngles();
 }
 
+void runQuickRecalibration(void) {
+  calibrateOffsets();
+  initializeAngles();
+  Serial.println("Quick recalibration complete");
+}
+
 bool alignmentIsActive(void) {
   return alignState.active;
+}
+
+bool alignmentCaptureInProgress(void) {
+  return alignCaptureState.active;
+}
+
+float alignmentCaptureProgressPercent(void) {
+  if (!alignCaptureState.active) return 0.0f;
+  const int totalTicks = alignCaptureSettleTicks + alignCaptureSampleTarget;
+  const int doneTicks =
+    (alignCaptureSettleTicks - alignCaptureState.settleTicksRemaining) +
+    alignCaptureState.sampleCount;
+  if (doneTicks <= 0) return 0.0f;
+  if (doneTicks >= totalTicks) return 100.0f;
+  return ((float)doneTicks * 100.0f) / (float)totalTicks;
 }
 
 const char *alignmentStepText(AlignmentStep step) {
@@ -507,6 +602,14 @@ const char *alignmentStepHintText(AlignmentStep step) {
 
 void printAlignmentInstruction() {
   if (!alignState.active) return;
+  if (alignState.awaitingRecal) {
+    Serial.println();
+    Serial.println("ALIGN 7/7");
+    Serial.println("Place tool: SCREEN UP");
+    Serial.println("Press CAPTURE to apply final recalibration");
+    Serial.println("Tip: ACTION button = CAPTURE");
+    return;
+  }
   Serial.println();
   Serial.print("ALIGN ");
   Serial.print((int)alignState.step + 1);
@@ -526,6 +629,19 @@ void alignmentGetInstruction(char *buf, unsigned int buf_size) {
   if (!buf || buf_size == 0) return;
   if (!alignState.active) {
     buf[0] = '\0';
+    return;
+  }
+  if (alignState.awaitingRecal) {
+    snprintf(
+      buf,
+      buf_size,
+      "ALIGN 7/7\nPlace tool: SCREEN UP\nPress CAPTURE to apply final recalibration"
+    );
+    return;
+  }
+  if (alignCaptureState.active) {
+    const int pct = (int)alignmentCaptureProgressPercent();
+    snprintf(buf, buf_size, "Capturing... %d%%", pct);
     return;
   }
   const char *boot_hint = "Tip: ACTION button = CAPTURE";
@@ -555,12 +671,15 @@ void alignmentGetInstruction(char *buf, unsigned int buf_size) {
 }
 
 void alignmentStart(void) {
+  modeWorkflowCancel();
+  recalibrationWorkflowCancel();
   if (alignState.active) {
     printAlignmentInstruction();
     return;
   }
 
   alignState.active = true;
+  alignState.awaitingRecal = false;
   alignState.step = ALIGN_SCREEN_UP;
   alignState.r_up = 0.0f;
   alignState.p_up = 0.0f;
@@ -570,6 +689,7 @@ void alignmentStart(void) {
   alignState.r_ru = 0.0f;
   alignState.p_bd = 0.0f;
   alignState.p_td = 0.0f;
+  alignCaptureState.active = false;
 
   Serial.print("\nAlignment FW ");
   Serial.print(FW_VERSION);
@@ -579,11 +699,14 @@ void alignmentStart(void) {
 
 void alignmentCancel(void) {
   if (!alignState.active) return;
+  alignState.awaitingRecal = false;
+  alignCaptureState.active = false;
   alignState.active = false;
   Serial.println("Alignment canceled");
 }
 
 void modeWorkflowStart(OrientationMode target) {
+  recalibrationWorkflowCancel();
   modePending = true;
   modeConfirmed = false;
   modeTargetState = target;
@@ -669,6 +792,123 @@ float modeWorkflowProgressPercent(void) {
   return ((float)elapsed * 100.0f) / (float)modeStillMs;
 }
 
+void recalibrationWorkflowStart(void) {
+  modeWorkflowCancel();
+  recalPending = true;
+  recalConfirmed = false;
+  recalSampling = false;
+  recalSampleCount = 0;
+  recalSumAx = recalSumAy = recalSumAz = 0.0f;
+  recalSumGx = recalSumGy = 0.0f;
+
+  Serial.println();
+  Serial.println("Recalibration workflow");
+  Serial.print("Reposition with ");
+  Serial.println(orientationMode == MODE_SCREEN_VERTICAL ? "SCREEN VERTICAL" : "SCREEN UP");
+  Serial.println("Send 'c' to CONFIRM and hold still");
+  Serial.println("Send 'x' to cancel");
+}
+
+void recalibrationWorkflowConfirm(void) {
+  if (!recalPending || recalConfirmed) return;
+  recalConfirmed = true;
+  recalSampling = false;
+  recalSampleCount = 0;
+  recalStartMs = millis();
+  recalRefRoll = roll_phys;
+  recalRefPitch = pitch_phys;
+  Serial.println("Recalibration confirmed. Hold still...");
+}
+
+void recalibrationWorkflowCancel(void) {
+  if (!recalPending) return;
+  recalPending = false;
+  recalConfirmed = false;
+  recalSampling = false;
+  recalSampleCount = 0;
+  Serial.println("Recalibration canceled");
+}
+
+void processRecalibrationWorkflow() {
+  if (!recalPending || !recalConfirmed) return;
+
+  const unsigned long now = millis();
+  if (!recalSampling) {
+    const float dr = fabsf(roll_phys - recalRefRoll);
+    const float dp = fabsf(pitch_phys - recalRefPitch);
+    if (dr > modeMotionThreshDeg || dp > modeMotionThreshDeg) {
+      recalStartMs = now;
+      recalRefRoll = roll_phys;
+      recalRefPitch = pitch_phys;
+      return;
+    }
+    if ((now - recalStartMs) >= modeStillMs) {
+      recalSampling = true;
+      recalSampleCount = 0;
+      recalSumAx = recalSumAy = recalSumAz = 0.0f;
+      recalSumGx = recalSumGy = 0.0f;
+      Serial.println("Recalibration sampling...");
+    }
+    return;
+  }
+
+  recalSumAx += lastRawAx;
+  recalSumAy += lastRawAy;
+  recalSumAz += lastRawAz;
+  recalSumGx += lastRawGx;
+  recalSumGy += lastRawGy;
+  recalSampleCount++;
+
+  if (recalSampleCount < recalSampleTarget) return;
+
+  ax_off = recalSumAx / (float)recalSampleTarget;
+  ay_off = recalSumAy / (float)recalSampleTarget;
+  az_off = (recalSumAz / (float)recalSampleTarget) - g_ref;
+  gx_off = recalSumGx / (float)recalSampleTarget;
+  gy_off = recalSumGy / (float)recalSampleTarget;
+  initializeAngles();
+
+  recalPending = false;
+  recalConfirmed = false;
+  recalSampling = false;
+  recalSampleCount = 0;
+  Serial.println("Recalibration complete");
+}
+
+bool recalibrationWorkflowIsActive(void) {
+  return recalPending;
+}
+
+bool recalibrationWorkflowIsConfirmed(void) {
+  return recalConfirmed;
+}
+
+float recalibrationWorkflowRemainingSeconds(void) {
+  if (!recalPending || !recalConfirmed) return 0.0f;
+  if (!recalSampling) {
+    const unsigned long now = millis();
+    const unsigned long elapsed = now - recalStartMs;
+    if (elapsed >= modeStillMs) return ((float)recalSampleTarget * 0.02f);
+    return ((float)(modeStillMs - elapsed) / 1000.0f) + ((float)recalSampleTarget * 0.02f);
+  }
+  const int rem = recalSampleTarget - recalSampleCount;
+  if (rem <= 0) return 0.0f;
+  return (float)rem * 0.02f;
+}
+
+float recalibrationWorkflowProgressPercent(void) {
+  if (!recalPending || !recalConfirmed) return 0.0f;
+  if (!recalSampling) {
+    const unsigned long now = millis();
+    const unsigned long elapsed = now - recalStartMs;
+    if (elapsed >= modeStillMs) return 40.0f;
+    return 40.0f * ((float)elapsed / (float)modeStillMs);
+  }
+  float frac = (float)recalSampleCount / (float)recalSampleTarget;
+  if (frac > 1.0f) frac = 1.0f;
+  return 40.0f + 60.0f * frac;
+}
+
 void finalizeAlignment() {
   float roll_bias =
     ( alignState.r_up
@@ -691,11 +931,9 @@ void finalizeAlignment() {
   EEPROM.put(EEPROM_ADDR_ALIGN + 4, align_pitch);
   EEPROM.commit();
 
-  calibrateOffsets();
-  initializeAngles();
-
-  alignState.active = false;
-  Serial.println("Alignment complete");
+  alignState.awaitingRecal = true;
+  Serial.println("Alignment complete (offsets saved)");
+  Serial.println("Final step: place SCREEN UP and CAPTURE to recalibrate");
   Serial.print("  align_roll=");
   Serial.print(align_roll, 3);
   Serial.print("  align_pitch=");

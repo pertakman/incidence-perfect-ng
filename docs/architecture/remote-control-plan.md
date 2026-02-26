@@ -109,7 +109,7 @@ Acceptance:
 
 - Route all remote actions through shared command router.
 - Add MODE and ALIGN actions (`confirm/cancel/capture`).
-- Ensure serial/touch/web stay synchronized.
+- Ensure serial/touch/ACTION-button/web stay synchronized.
 
 Acceptance:
 - Toggling from any interface is reflected everywhere.
