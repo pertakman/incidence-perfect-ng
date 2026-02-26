@@ -64,11 +64,12 @@ static lv_disp_t *disp_handle = nullptr;
 
 typedef enum {
   UI_STATE_NORMAL,
-  UI_STATE_ALIGN_CAPTURE,
-  UI_STATE_ALIGN_DONE
+  UI_STATE_ALIGN,
+  UI_STATE_MODE
 } ui_state_t;
 
 static ui_state_t ui_state = UI_STATE_NORMAL;
+static void ui_set_state(ui_state_t new_state);
 
 volatile AxisDisplayMode ui_axis_mode = AXIS_BOTH;
 
@@ -79,6 +80,8 @@ volatile AxisDisplayMode ui_axis_mode = AXIS_BOTH;
 // Top status
 static lv_obj_t *label_mode;
 static lv_obj_t *label_header;
+static lv_obj_t *boot_hint_box;
+static lv_obj_t *label_boot_hint;
 
 // Instruction group
 static lv_obj_t *instr_grp;
@@ -92,7 +95,7 @@ static lv_obj_t *label_pitch;
 static lv_obj_t *label_roll_value;
 static lv_obj_t *label_pitch_value;
 
-constexpr int READOUT_Y = 30;   // <<<<<< adjust vertical balance here
+constexpr int READOUT_Y = 18;   // moved up to free room for hints above controls
 
 // Buttons
 static lv_obj_t *btn_zero;
@@ -106,6 +109,7 @@ static lv_obj_t *label_btn_axis;
 static lv_obj_t *label_btn_mode;
 static lv_obj_t *label_btn_align;
 static lv_obj_t *label_btn_rotate;
+static uint32_t zero_feedback_until_ms = 0;
 
 static const char *axis_mode_text()
 {
@@ -116,22 +120,110 @@ static const char *axis_mode_text()
   }
 }
 
+static const char *orientation_text_for(OrientationMode m)
+{
+  return (m == MODE_SCREEN_VERTICAL) ? "SCREEN VERTICAL" : "SCREEN UP";
+}
+
+static void process_mode_pending()
+{
+  // MODE workflow is owned by inclinometer.cpp and mirrored here.
+}
+
 static void update_status_label()
 {
   static char last[64] = "";
   char buf[64];
   const char *orientation_text =
     (orientationMode == MODE_SCREEN_VERTICAL) ? "SCREEN VERTICAL" : "SCREEN UP";
-  snprintf(buf, sizeof(buf), "%s | %s | ROT %d",
+  snprintf(buf, sizeof(buf), "%s | %s | ROT %d | %s",
            orientation_text,
            axis_mode_text(),
-           displayRotated ? 180 : 0);
+           displayRotated ? 180 : 0,
+           measurementIsFrozen() ? "FROZEN" : "LIVE");
 
   if (strcmp(buf, last) != 0) {
     lv_label_set_text(label_mode, buf);
     strncpy(last, buf, sizeof(last) - 1);
     last[sizeof(last) - 1] = '\0';
   }
+}
+
+static void update_alignment_instruction()
+{
+  char buf[128];
+  alignmentGetInstruction(buf, sizeof(buf));
+  lv_label_set_text(label_instruction, buf);
+}
+
+static void update_boot_hint_label()
+{
+  static char last[96] = "";
+  char buf[96] = "";
+  const uint32_t now_ms = millis();
+
+  if (ui_state == UI_STATE_ALIGN) {
+    lv_obj_add_flag(boot_hint_box, LV_OBJ_FLAG_HIDDEN);
+    last[0] = '\0';
+    return;
+  }
+
+  if (ui_state == UI_STATE_MODE) {
+    const char *target_text = orientation_text_for(modeWorkflowTarget());
+    if (!modeWorkflowIsConfirmed()) {
+      if (bootHoldIsActive()) {
+        const unsigned long hold_ms = bootHoldDurationMs();
+        if (hold_ms < 1200) {
+          const float to_cancel = (1200 - hold_ms) / 1000.0f;
+          snprintf(buf, sizeof(buf),
+                   "BOOT: Release=CONFIRM | CANCEL in %.1fs",
+                   to_cancel);
+        } else {
+          snprintf(buf, sizeof(buf), "BOOT: Release=CANCEL");
+        }
+      } else {
+        snprintf(buf, sizeof(buf), "Position with %s", target_text);
+      }
+    } else {
+      const float rem = modeWorkflowRemainingSeconds();
+      if (rem > 0.0f) {
+        snprintf(buf, sizeof(buf), "Hold still %.1fs", rem);
+      } else {
+        snprintf(buf, sizeof(buf), "Applying...");
+      }
+    }
+  } else if (now_ms < zero_feedback_until_ms) {
+    snprintf(buf, sizeof(buf), "ZERO APPLIED - hold still briefly");
+  } else if (!bootHoldIsActive()) {
+    lv_obj_add_flag(boot_hint_box, LV_OBJ_FLAG_HIDDEN);
+    last[0] = '\0';
+    return;
+  }
+
+  if (ui_state == UI_STATE_NORMAL && now_ms >= zero_feedback_until_ms) {
+    const unsigned long hold_ms = bootHoldDurationMs();
+    const float to_axis = (hold_ms < 1200) ? (1200 - hold_ms) / 1000.0f : 0.0f;
+    const float to_mode = (hold_ms < 2200) ? (2200 - hold_ms) / 1000.0f : 0.0f;
+
+    if (hold_ms < 1200) {
+      snprintf(buf, sizeof(buf),
+               "Release: FREEZE | AXIS in %.1fs",
+               to_axis);
+    } else if (hold_ms < 2200) {
+      snprintf(buf, sizeof(buf),
+               "Release: AXIS | MODE in %.1fs",
+               to_mode);
+    } else {
+      snprintf(buf, sizeof(buf), "Release: MODE");
+    }
+  }
+
+  if (strcmp(last, buf) != 0) {
+    lv_label_set_text(label_boot_hint, buf);
+    strncpy(last, buf, sizeof(last) - 1);
+    last[sizeof(last) - 1] = '\0';
+  }
+  lv_obj_clear_flag(boot_hint_box, LV_OBJ_FLAG_HIDDEN);
 }
 
 // ============================================================
@@ -217,28 +309,29 @@ static void apply_ui_state()
 
     case UI_STATE_NORMAL:
       lv_obj_clear_flag(label_mode, LV_OBJ_FLAG_HIDDEN);
+      lv_obj_add_flag(boot_hint_box, LV_OBJ_FLAG_HIDDEN);
       lv_obj_add_flag(label_header, LV_OBJ_FLAG_HIDDEN);
       lv_obj_add_flag(instr_grp,    LV_OBJ_FLAG_HIDDEN);
 
       lv_label_set_text(label_btn_zero,  "ZERO");
+      lv_label_set_text(label_btn_mode,  "MODE");
       lv_label_set_text(label_btn_align, "ALIGN");
 
       lv_obj_clear_state(btn_mode,   LV_STATE_DISABLED);
       lv_obj_clear_state(btn_rotate, LV_STATE_DISABLED);
       lv_obj_clear_state(btn_axis,   LV_STATE_DISABLED);
+      lv_obj_clear_state(btn_align,  LV_STATE_DISABLED);
 
       apply_axis_layout();
       break;
 
-    case UI_STATE_ALIGN_CAPTURE:
+    case UI_STATE_ALIGN:
+      modeWorkflowCancel();
       lv_obj_add_flag(label_mode, LV_OBJ_FLAG_HIDDEN);
-      lv_label_set_text(label_header, "ALIGNMENT");
-      lv_obj_clear_flag(label_header, LV_OBJ_FLAG_HIDDEN);
+      lv_obj_add_flag(boot_hint_box, LV_OBJ_FLAG_HIDDEN);
+      lv_obj_add_flag(label_header, LV_OBJ_FLAG_HIDDEN);
 
-      lv_label_set_text(
-        label_instruction,
-        "Place tool on reference surface\nand press CAPTURE"
-      );
+      update_alignment_instruction();
       lv_obj_clear_flag(instr_grp, LV_OBJ_FLAG_HIDDEN);
 
       lv_obj_add_flag(roll_grp,  LV_OBJ_FLAG_HIDDEN);
@@ -250,15 +343,24 @@ static void apply_ui_state()
       lv_obj_add_state(btn_mode,   LV_STATE_DISABLED);
       lv_obj_add_state(btn_rotate, LV_STATE_DISABLED);
       lv_obj_add_state(btn_axis,   LV_STATE_DISABLED);
+      lv_obj_clear_state(btn_align, LV_STATE_DISABLED);
       break;
 
-    case UI_STATE_ALIGN_DONE:
-      lv_obj_add_flag(label_mode, LV_OBJ_FLAG_HIDDEN);
-      lv_label_set_text(
-        label_instruction,
-        "Alignment captured\nPress DONE to continue"
-      );
-      lv_label_set_text(label_btn_align, "DONE");
+    case UI_STATE_MODE:
+      lv_obj_clear_flag(label_mode, LV_OBJ_FLAG_HIDDEN);
+      lv_obj_add_flag(label_header, LV_OBJ_FLAG_HIDDEN);
+      lv_obj_add_flag(instr_grp, LV_OBJ_FLAG_HIDDEN);
+
+      lv_label_set_text(label_btn_zero, "CANCEL");
+      lv_label_set_text(label_btn_mode, "CONFIRM");
+      lv_label_set_text(label_btn_align, "ALIGN");
+
+      lv_obj_add_state(btn_axis,   LV_STATE_DISABLED);
+      lv_obj_add_state(btn_align,  LV_STATE_DISABLED);
+      lv_obj_add_state(btn_rotate, LV_STATE_DISABLED);
+      lv_obj_clear_state(btn_mode, LV_STATE_DISABLED);
+
+      apply_axis_layout();
       break;
   }
 }
@@ -298,33 +400,74 @@ void cycleAxisMode(void)
 
 static void on_zero_pressed(lv_event_t *)
 {
-  if (ui_state == UI_STATE_NORMAL) setZeroReference();
-  else ui_set_state(UI_STATE_NORMAL);
+  if (ui_state == UI_STATE_MODE) {
+    modeWorkflowCancel();
+    ui_set_state(UI_STATE_NORMAL);
+    return;
+  }
+
+  if (ui_state == UI_STATE_NORMAL) {
+    setZeroReference();
+    zero_feedback_until_ms = millis() + 1400;
+  }
+  else {
+    alignmentCancel();
+    ui_set_state(UI_STATE_NORMAL);
+  }
 }
 
 static void on_axis_pressed(lv_event_t *)
 {
   if (ui_state != UI_STATE_NORMAL) return;
+  modeWorkflowCancel();
   cycleAxisMode();
 }
 
 static void on_mode_pressed(lv_event_t *)
 {
-  if (ui_state == UI_STATE_NORMAL) cycleMode();
+  if (ui_state == UI_STATE_NORMAL) {
+    modeWorkflowStartToggle();
+    ui_set_state(UI_STATE_MODE);
+    return;
+  }
+
+  if (ui_state != UI_STATE_MODE) return;
+
+  if (!modeWorkflowIsConfirmed()) {
+    modeWorkflowConfirm();
+    return;
+  }
+}
+
+static void on_readout_pressed(lv_event_t *)
+{
+  if (ui_state != UI_STATE_NORMAL) return;
+  modeWorkflowCancel();
+  toggleMeasurementFreeze();
 }
 
 static void on_align_pressed(lv_event_t *)
 {
-  if (ui_state == UI_STATE_NORMAL) ui_set_state(UI_STATE_ALIGN_CAPTURE);
-  else if (ui_state == UI_STATE_ALIGN_CAPTURE) {
+  if (ui_state == UI_STATE_NORMAL) {
+    modeWorkflowCancel();
+    alignmentStart();
+    if (alignmentIsActive()) ui_set_state(UI_STATE_ALIGN);
+  } else if (ui_state == UI_STATE_ALIGN) {
     alignmentCapture();
-    ui_set_state(UI_STATE_ALIGN_DONE);
-  } else ui_set_state(UI_STATE_NORMAL);
+    if (alignmentIsActive()) {
+      update_alignment_instruction();
+    } else {
+      ui_set_state(UI_STATE_NORMAL);
+    }
+  }
 }
 
 static void on_rotate_pressed(lv_event_t *)
 {
-  if (ui_state == UI_STATE_NORMAL) toggleRotation();
+  if (ui_state == UI_STATE_NORMAL) {
+    modeWorkflowCancel();
+    toggleRotation();
+  }
 }
 
 // ============================================================
@@ -366,13 +509,33 @@ static void create_ui()
   lv_obj_align(label_header, LV_ALIGN_TOP_MID, 0, 6);
   lv_obj_add_flag(label_header, LV_OBJ_FLAG_HIDDEN);
 
+  boot_hint_box = lv_obj_create(scr);
+  lv_obj_set_size(boot_hint_box, lv_pct(96), 30);
+  lv_obj_align(boot_hint_box, LV_ALIGN_BOTTOM_MID, 0, -68);
+  lv_obj_set_style_bg_color(boot_hint_box, lv_color_black(), 0);
+  lv_obj_set_style_bg_opa(boot_hint_box, LV_OPA_80, 0);
+  lv_obj_set_style_border_width(boot_hint_box, 0, 0);
+  lv_obj_set_style_radius(boot_hint_box, 8, 0);
+  lv_obj_set_style_pad_all(boot_hint_box, 2, 0);
+  lv_obj_clear_flag(boot_hint_box, LV_OBJ_FLAG_SCROLLABLE);
+
+  label_boot_hint = lv_label_create(boot_hint_box);
+  lv_label_set_text(label_boot_hint, "");
+  lv_obj_set_style_text_font(label_boot_hint, &lv_font_montserrat_20, 0);
+  lv_obj_set_style_text_color(label_boot_hint, lv_color_hex(0xE6F5FF), 0);
+  lv_obj_set_style_text_align(label_boot_hint, LV_TEXT_ALIGN_CENTER, 0);
+  lv_label_set_long_mode(label_boot_hint, LV_LABEL_LONG_WRAP);
+  lv_obj_set_width(label_boot_hint, lv_pct(98));
+  lv_obj_center(label_boot_hint);
+  lv_obj_add_flag(boot_hint_box, LV_OBJ_FLAG_HIDDEN);
+
   // ==========================================================
   // INSTRUCTION GROUP (modal, centered)
   // ==========================================================
 
   instr_grp = lv_obj_create(scr);
-  lv_obj_set_width(instr_grp, lv_pct(96));
-  lv_obj_align(instr_grp, LV_ALIGN_CENTER, 0, -10);
+  lv_obj_set_width(instr_grp, lv_pct(94));
+  lv_obj_align(instr_grp, LV_ALIGN_CENTER, 0, -34);
   lv_obj_set_flex_flow(instr_grp, LV_FLEX_FLOW_COLUMN);
   lv_obj_set_flex_align(instr_grp,
                         LV_FLEX_ALIGN_CENTER,
@@ -382,7 +545,7 @@ static void create_ui()
   lv_obj_set_style_bg_color(instr_grp, lv_color_black(), 0);
   lv_obj_set_style_bg_opa(instr_grp, LV_OPA_80, 0);
   lv_obj_set_style_border_width(instr_grp, 0, 0);
-  lv_obj_set_style_pad_all(instr_grp, 12, 0);
+  lv_obj_set_style_pad_all(instr_grp, 8, 0);
 
   lv_obj_clear_flag(instr_grp, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_set_scrollbar_mode(instr_grp, LV_SCROLLBAR_MODE_OFF);
@@ -391,7 +554,7 @@ static void create_ui()
   lv_obj_set_width(label_instruction, lv_pct(100));
   lv_label_set_text(label_instruction, "");
   lv_label_set_long_mode(label_instruction, LV_LABEL_LONG_WRAP);
-  lv_obj_set_style_text_font(label_instruction, &lv_font_montserrat_28, 0);
+  lv_obj_set_style_text_font(label_instruction, &lv_font_montserrat_24, 0);
   lv_obj_set_style_text_color(label_instruction, lv_color_hex(0xE0E0E0), 0);
   lv_obj_set_style_text_align(label_instruction, LV_TEXT_ALIGN_CENTER, 0);
 
@@ -403,6 +566,7 @@ static void create_ui()
 
   // --- Roll ---
   roll_grp = lv_obj_create(scr);
+  lv_obj_add_flag(roll_grp, LV_OBJ_FLAG_CLICKABLE);
   lv_obj_set_style_bg_opa(roll_grp, LV_OPA_TRANSP, 0);
   lv_obj_set_style_border_width(roll_grp, 0, 0);
   lv_obj_set_flex_flow(roll_grp, LV_FLEX_FLOW_COLUMN);
@@ -418,6 +582,7 @@ static void create_ui()
 
   // --- Pitch ---
   pitch_grp = lv_obj_create(scr);
+  lv_obj_add_flag(pitch_grp, LV_OBJ_FLAG_CLICKABLE);
   lv_obj_set_style_bg_opa(pitch_grp, LV_OPA_TRANSP, 0);
   lv_obj_set_style_border_width(pitch_grp, 0, 0);
   lv_obj_set_flex_flow(pitch_grp, LV_FLEX_FLOW_COLUMN);
@@ -509,12 +674,44 @@ static void create_ui()
   lv_obj_set_size(btn_align,  BTN_W, BTN_H);
   lv_obj_set_size(btn_rotate, BTN_W, BTN_H);
 
+  // Make touch targets more forgiving for larger fingers.
+  lv_obj_set_ext_click_area(btn_zero,   10);
+  lv_obj_set_ext_click_area(btn_axis,   10);
+  lv_obj_set_ext_click_area(btn_mode,   10);
+  lv_obj_set_ext_click_area(btn_align,  10);
+  lv_obj_set_ext_click_area(btn_rotate, 10);
+
   // Preserve shadow for press animation
   lv_obj_set_style_shadow_width(btn_zero,   8, LV_STATE_DEFAULT);
   lv_obj_set_style_shadow_width(btn_axis,   8, LV_STATE_DEFAULT);
   lv_obj_set_style_shadow_width(btn_mode,   8, LV_STATE_DEFAULT);
   lv_obj_set_style_shadow_width(btn_align,  8, LV_STATE_DEFAULT);
   lv_obj_set_style_shadow_width(btn_rotate, 8, LV_STATE_DEFAULT);
+
+  // Snappier button interaction: faster transitions + tighter pressed feedback.
+  lv_obj_set_style_anim_time(btn_zero,   70, LV_PART_MAIN);
+  lv_obj_set_style_anim_time(btn_axis,   70, LV_PART_MAIN);
+  lv_obj_set_style_anim_time(btn_mode,   70, LV_PART_MAIN);
+  lv_obj_set_style_anim_time(btn_align,  70, LV_PART_MAIN);
+  lv_obj_set_style_anim_time(btn_rotate, 70, LV_PART_MAIN);
+
+  lv_obj_set_style_transform_width(btn_zero,   -2, LV_STATE_PRESSED);
+  lv_obj_set_style_transform_width(btn_axis,   -2, LV_STATE_PRESSED);
+  lv_obj_set_style_transform_width(btn_mode,   -2, LV_STATE_PRESSED);
+  lv_obj_set_style_transform_width(btn_align,  -2, LV_STATE_PRESSED);
+  lv_obj_set_style_transform_width(btn_rotate, -2, LV_STATE_PRESSED);
+
+  lv_obj_set_style_transform_height(btn_zero,   -2, LV_STATE_PRESSED);
+  lv_obj_set_style_transform_height(btn_axis,   -2, LV_STATE_PRESSED);
+  lv_obj_set_style_transform_height(btn_mode,   -2, LV_STATE_PRESSED);
+  lv_obj_set_style_transform_height(btn_align,  -2, LV_STATE_PRESSED);
+  lv_obj_set_style_transform_height(btn_rotate, -2, LV_STATE_PRESSED);
+
+  lv_obj_set_style_shadow_width(btn_zero,   3, LV_STATE_PRESSED);
+  lv_obj_set_style_shadow_width(btn_axis,   3, LV_STATE_PRESSED);
+  lv_obj_set_style_shadow_width(btn_mode,   3, LV_STATE_PRESSED);
+  lv_obj_set_style_shadow_width(btn_align,  3, LV_STATE_PRESSED);
+  lv_obj_set_style_shadow_width(btn_rotate, 3, LV_STATE_PRESSED);
 
   label_btn_zero   = lv_label_create(btn_zero);
   label_btn_axis   = lv_label_create(btn_axis);
@@ -539,6 +736,8 @@ static void create_ui()
   lv_obj_add_event_cb(btn_mode,   on_mode_pressed,   LV_EVENT_CLICKED, NULL);
   lv_obj_add_event_cb(btn_align,  on_align_pressed,  LV_EVENT_CLICKED, NULL);
   lv_obj_add_event_cb(btn_rotate, on_rotate_pressed, LV_EVENT_CLICKED, NULL);
+  lv_obj_add_event_cb(roll_grp,   on_readout_pressed, LV_EVENT_CLICKED, NULL);
+  lv_obj_add_event_cb(pitch_grp,  on_readout_pressed, LV_EVENT_CLICKED, NULL);
 }
 
 // ============================================================
@@ -549,10 +748,49 @@ static void update_ui()
 {
   static char last_r[16] = "";
   static char last_p[16] = "";
+  static bool last_align_active = false;
+  static bool last_frozen = false;
+  static float frozen_display_roll = 0.0f;
+  static float frozen_display_pitch = 0.0f;
 
-  ui_roll_smooth  = smooth_value(ui_roll_smooth,  ui_roll);
-  ui_pitch_smooth = smooth_value(ui_pitch_smooth, ui_pitch);
+  bool align_active = alignmentIsActive();
+  if (align_active != last_align_active) {
+    ui_set_state(align_active ? UI_STATE_ALIGN : UI_STATE_NORMAL);
+    last_align_active = align_active;
+  }
+
+  if (!align_active) {
+    const bool mode_active = modeWorkflowIsActive();
+    if (mode_active && ui_state != UI_STATE_MODE) {
+      ui_set_state(UI_STATE_MODE);
+    } else if (!mode_active && ui_state == UI_STATE_MODE) {
+      ui_set_state(UI_STATE_NORMAL);
+    }
+  }
+
+  const bool frozen = measurementIsFrozen();
+  if (frozen && !last_frozen) {
+    // Freeze what the user currently sees, not the next filtered sample.
+    frozen_display_roll = ui_roll_smooth;
+    frozen_display_pitch = ui_pitch_smooth;
+  }
+
+  if (frozen) {
+    ui_roll_smooth = frozen_display_roll;
+    ui_pitch_smooth = frozen_display_pitch;
+  } else {
+    ui_roll_smooth  = smooth_value(ui_roll_smooth,  ui_roll);
+    ui_pitch_smooth = smooth_value(ui_pitch_smooth, ui_pitch);
+  }
+  last_frozen = frozen;
+
+  process_mode_pending();
   update_status_label();
+
+  if (ui_state == UI_STATE_ALIGN) {
+    update_alignment_instruction();
+  }
+  update_boot_hint_label();
 
   char buf[16];
 

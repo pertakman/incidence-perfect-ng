@@ -58,4 +58,24 @@ Tester: Per Takman
 ## Sign-off
 
 - Baseline status: IN PROGRESS
-- Next action: Validate new `MODE` button behavior (`RP` <-> `INC`) and re-run quick sweep for T10/T11/T15/T17.
+- Next action: Re-run against updated checklist IDs T10-T29 (guided MODE, BOOT roles, freeze immediacy, and touch/serial sync).
+
+## Additional Test Coverage To Include (Current UI/FW)
+
+- Guided MODE workflow parity:
+  - touch-started workflow must appear in serial prompts
+  - serial-started workflow must appear on-screen
+  - `CONFIRM`/`CANCEL` parity across touch, BOOT, and serial (`c`/`x`)
+- MODE auto-apply behavior:
+  - hold-still countdown resets on movement
+  - mode applies automatically when timer completes
+- BOOT role matrix:
+  - Normal mode: short/long/very-long actions
+  - MODE workflow: short=confirm, long=cancel
+  - ALIGN workflow: capture
+- Freeze behavior:
+  - readout tap freezes immediately at currently displayed value (no visual lag)
+  - status toggles `LIVE`/`FROZEN`
+- UI readability/touchability:
+  - hint lane remains outside readout area
+  - button press reliability with expanded touch hit area

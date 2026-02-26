@@ -42,13 +42,36 @@ Use this before first-time flashing a new hardware unit.
 ## Serial Commands
 
 - `z`: set zero reference from current position
-- `c`: quick sensor recalibration (`calibrateOffsets()` + `initializeAngles()`)
-- `C`: full mechanical alignment workflow (`runAlignmentCalibration()`)
-- `u`: force `SCREEN UP` orientation mode
-- `v`: force `SCREEN VERTICAL` orientation mode
-- `m`: toggle orientation mode (`u/v`)
+- `c`: quick sensor recalibration (`calibrateOffsets()` + `initializeAngles()`) when not aligning; during alignment it captures the current step
+- `C`: start guided 6-step mechanical alignment workflow (shared by touch UI and serial)
+- `u`: start guided mode change targeting `SCREEN UP` (confirm with `c`, cancel with `x`)
+- `v`: start guided mode change targeting `SCREEN VERTICAL` (confirm with `c`, cancel with `x`)
+- `m`: start guided mode change targeting the opposite orientation (confirm with `c`, cancel with `x`)
+- `x`: cancel pending serial-guided mode change
+
+Touch UI and serial now share the same MODE workflow state, so actions in one interface are reflected in the other.
 - `a`: cycle axis display/output (`BOTH -> ROLL -> PITCH`)
 - `r`: toggle 180-degree screen rotation
+
+## Hardware Controls
+
+- `BOOT` button (`GPIO0`, active-low):
+  - In ALIGN workflow: press/release = `CAPTURE`
+  - In MODE workflow: short press = `CONFIRM`, long press = `CANCEL`
+  - In normal mode short press: toggle freeze (`LIVE` <-> `FROZEN`)
+  - In normal mode long press (~1.2s): cycle axis (`BOTH -> ROLL -> PITCH`)
+  - In normal mode very long press (~2.2s): toggle orientation (`SCREEN UP` <-> `SCREEN VERTICAL`)
+  - While holding in normal mode, an on-screen hint shows the release action and countdown to the next action threshold.
+- Touch readout area:
+  - Tap the roll/pitch value area to toggle freeze (`LIVE` <-> `FROZEN`)
+- UI behavior:
+  - `ZERO` shows a short on-screen confirmation (`ZERO APPLIED - hold still briefly`).
+  - Button touch targets are extended to improve tap reliability.
+  - `MODE` is guided:
+    - first press opens mode guidance with target orientation and changes `MODE` to `CONFIRM`,
+    - first `CONFIRM` starts stillness countdown,
+    - mode change auto-applies after countdown completes,
+    - `ZERO` or BOOT long-press cancels a pending mode change.
 
 ### `c` vs `C`
 
@@ -56,12 +79,26 @@ Use this before first-time flashing a new hardware unit.
 - Use `C` when you need full mechanical alignment (mounting/enclosure bias correction).
 - In short: `c` is fast sensor re-zero; `C` is full alignment procedure.
 
+## Versioning Policy
+
+Firmware versions use the format `YYYY.M.X`.
+
+- `YYYY`: calendar year (for example `2026`)
+- `M`: month number (`1`-`12`)
+- `X`: incremental release/build number within the month (`1`, `2`, `3`, ...)
+
+Examples:
+- `2026.2.1` = first firmware release in February 2026
+- `2026.2.4` = fourth firmware release in February 2026
+- `2026.3.1` = first firmware release in March 2026
+
 ## Notes
 
 - Project config is in `platformio.ini`.
 - Source files are in `src/` (standard PlatformIO layout).
 - LVGL config lives at `config/lvgl/lv_conf.h` and is wired via build flags in `platformio.ini`.
 - Hardware setup notes and reference image are under `docs/hardware/`.
+- Splash screen design assets are under `docs/assets/splash-screens/`.
 - Architecture notes are under `docs/architecture/`.
 - Validation checklists are under `docs/testing/`.
 - Current dependency pins in `platformio.ini`:
@@ -74,5 +111,34 @@ Use this before first-time flashing a new hardware unit.
 - `src/`: firmware source code
 - `config/lvgl/`: LVGL configuration (`lv_conf.h`)
 - `docs/hardware/`: board setup references
+- `docs/assets/splash-screens/`: splash screen image assets
 - `docs/architecture/`: design notes and diagrams
 - `docs/testing/`: hardware validation workflow and test logs
+
+## Backlog
+
+1. Beta hardening
+- Re-run full hardware validation on all beta units.
+- Confirm EEPROM persistence after repeated power cycles for orientation, rotation, alignment, and freeze behavior.
+
+2. UX and control polish
+- Tune BOOT hold hint readability (font size/placement/colors) based on field feedback.
+- Tune `MODE` guided workflow timing (`MODE_STILL_MS`, motion threshold) from real usage.
+- Add optional on-screen icon/progress indicator for BOOT long-press thresholds (short/long/very-long).
+
+3. Documentation cleanup
+- Update `docs/testing/hardware-validation-checklist.md` to fully match current behavior (guided MODE and full ALIGN flow).
+- Update `docs/testing/validation-session-template.md` with current test matrix and remove stale references.
+
+4. Connectivity exploration
+- Investigate smartphone connectivity options:
+  - native app approach
+  - lightweight web UI approach (served page or companion bridge)
+- Define minimum viable remote UI scope (read-only telemetry first, then optional control actions).
+
+5. Release/versioning
+- Add a splash screen that overlays firmware version at boot.
+- Adopt firmware version format `YYYY.M.X`.
+  - `YYYY` = year (for now `2026`)
+  - `M` = month number
+  - `X` = incremental build/release number within that month

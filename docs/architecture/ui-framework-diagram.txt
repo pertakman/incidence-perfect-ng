@@ -1,48 +1,67 @@
-+----------------------------------------------+
-¦                APPLICATION                   ¦
-¦  inclinometer_v4.2.ino                       ¦
-¦                                              ¦
-¦  - Computes roll / pitch                     ¦
-¦  - Knows orientation mode                    ¦
-¦  - Knows alignment logic                     ¦
-¦                                              ¦
-¦  Calls ONLY these functions:                 ¦
-¦                                              ¦
-¦    ui_set_angles(roll, pitch)                ¦
-¦    ui_set_orientation(mode)                  ¦
-¦    ui_set_state(UI_STATE_*)                  ¦
-¦                                              ¦
-+---------------?------------------------------+
-                ¦
-                ¦  (simple function calls)
-                ¦
-+----------------------------------------------+
-¦                  UI CORE                     ¦
-¦              ui_lvgl.ino                     ¦
-¦                                              ¦
-¦  +----------------------------------------+  ¦
-¦  ¦ UI STATE MACHINE                        ¦  ¦
-¦  ¦  ui_state_t                             ¦  ¦
-¦  ¦  axis_display_t                         ¦  ¦
-¦  +----------------------------------------+  ¦
-¦                 ¦                             ¦
-¦                 ?                             ¦
-¦  +----------------------------------------+  ¦
-¦  ¦ UI POLICIES (pure functions)            ¦  ¦
-¦  ¦                                        ¦  ¦
-¦  ¦  apply_state_policy()                  ¦  ¦
-¦  ¦  apply_axis_policy()                   ¦  ¦
-¦  ¦  apply_orientation_policy()             ¦  ¦
-¦  +----------------------------------------+  ¦
-¦                 ¦                             ¦
-¦                 ?                             ¦
-¦  +----------------------------------------+  ¦
-¦  ¦ LVGL OBJECTS                            ¦  ¦
-¦  ¦  labels, groups, buttons               ¦  ¦
-¦  ¦                                        ¦  ¦
-¦  ¦  (NO LOGIC HERE)                       ¦  ¦
-¦  +----------------------------------------+  ¦
-¦                                              ¦
-¦  Buttons ? emit EVENTS only                  ¦
-¦  No button mutates UI directly               ¦
-+----------------------------------------------+
+UI Framework Diagram (Current)
+==============================
+
+[main.cpp]
+  setup(): setup_display() + setup_inclinometer()
+  loop():  loop_inclinometer() + loop_display()
+
+
+1) State Ownership (authoritative)
+----------------------------------
+- inclinometer.cpp owns runtime state and workflows:
+  - orientationMode, displayRotated, freeze state
+  - ALIGN workflow state (6-step capture)
+  - MODE workflow state (pending/confirmed/target/countdown)
+  - BOOT button timing and action mapping
+- ui_lvgl.cpp renders and drives UI events against shared APIs.
+
+
+2) Input Channels -> Shared Workflows
+-------------------------------------
+Touch UI
+- ZERO / AXIS / MODE / ALIGN / ROTATE
+- readout tap for FREEZE
+
+Serial
+- z, c, C, u, v, m, x, a, r
+
+BOOT (GPIO0)
+- ALIGN: short release -> capture
+- MODE workflow: short release -> confirm, long release -> cancel
+- Normal: short -> freeze, long -> axis, very-long -> mode toggle
+
+All channels converge on shared functions in inclinometer_shared.h.
+
+
+3) MODE Workflow (shared between serial + touch)
+-------------------------------------------------
+- start: modeWorkflowStart(...) / modeWorkflowStartToggle()
+- confirm: modeWorkflowConfirm()
+- cancel: modeWorkflowCancel()
+- auto-apply after hold-still timer in firmware
+- UI and serial both observe same underlying mode workflow state
+
+
+4) ALIGN Workflow (shared between serial + touch)
+--------------------------------------------------
+- start: alignmentStart()
+- capture: alignmentCapture()
+- cancel: alignmentCancel()
+- instruction text: alignmentGetInstruction(...)
+
+
+5) Rendering Responsibilities
+-----------------------------
+- ui_lvgl.cpp:
+  - renders status line and readout values
+  - renders modal instruction panel for ALIGN
+  - renders hint/feedback strip above control bar
+  - mirrors shared workflow state (does not own calibration logic)
+
+
+Legacy Note
+-----------
+This file previously described an older UI-only state model where ui_lvgl.*
+owned most workflow logic. That is now superseded. Current source of truth
+is shared workflow logic in src/inclinometer.cpp with UI as a synchronized
+view/controller.
