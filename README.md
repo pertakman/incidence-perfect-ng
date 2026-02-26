@@ -83,9 +83,18 @@ Touch UI and serial now share the same MODE workflow state, so actions in one in
 
 Firmware versions use the format `YYYY.M.X`.
 
+Current firmware version is generated automatically at build time.
+
 - `YYYY`: calendar year (for example `2026`)
 - `M`: month number (`1`-`12`)
 - `X`: incremental release/build number within the month (`1`, `2`, `3`, ...)
+
+Build behavior:
+- Default: `FW_VERSION` is auto-generated in PlatformIO as `YYYY.M.X`.
+- `X` is computed from current-month commit count on `HEAD` (minimum `1`).
+- Override for release candidates/special builds by setting env var before build:
+  - PowerShell: `$env:FW_VERSION_OVERRIDE=\"2026.2.99-rc1\"`
+  - then run `pio run` / `pio run -t upload`
 
 Examples:
 - `2026.2.1` = first firmware release in February 2026
@@ -99,6 +108,12 @@ Examples:
 - LVGL config lives at `config/lvgl/lv_conf.h` and is wired via build flags in `platformio.ini`.
 - Hardware setup notes and reference image are under `docs/hardware/`.
 - Splash screen design assets are under `docs/assets/splash-screens/`.
+- Splash generation pipeline:
+  - script: `scripts/generate_splash.ps1`
+  - default flow: `crop-scale` (crop to aspect ratio + scale to `536x240`)
+  - outputs:
+    - device PNG in `docs/assets/splash-screens/device/`
+    - firmware header `src/splash_image_536x240_rgb565.h`
 - Architecture notes are under `docs/architecture/`.
 - Validation checklists are under `docs/testing/`.
 - Current dependency pins in `platformio.ini`:
@@ -137,7 +152,6 @@ Examples:
 - Define minimum viable remote UI scope (read-only telemetry first, then optional control actions).
 
 5. Release/versioning
-- Add a splash screen that overlays firmware version at boot.
 - Adopt firmware version format `YYYY.M.X`.
   - `YYYY` = year (for now `2026`)
   - `M` = month number
