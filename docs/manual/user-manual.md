@@ -18,10 +18,10 @@ Incidence Perfect NG is a compact 2-axis inclinometer/incidence meter built arou
 ### Power + Boot
 
 - Connect the device over USB power.
-- On boot youâ€™ll see the splash screen with the firmware version in the lower-right.
+- On boot you'll see the splash screen with the firmware version in the lower-right.
 - After boot, the live readout screen appears (roll/pitch).
 
-### What Youâ€™re Looking At
+### What You're Looking At
 
 - **Top status line** shows:
   - orientation mode (`SCREEN UP` or `SCREEN VERTICAL`)
@@ -86,7 +86,7 @@ While holding BOOT, an on-screen hint shows what will happen on release and a pr
 
 `MODE` changes how the device interprets orientation.
 
-- `SCREEN UP`: standard â€œscreen facing upâ€ use case
+- `SCREEN UP`: standard "screen facing up" use case
 - `SCREEN VERTICAL`: use case where the tool is used on a vertical surface
 
 ### Touch Workflow
@@ -153,12 +153,12 @@ Serial and touch workflows are designed to stay synchronized.
 - Use BOOT alternatives for critical actions.
 - Try deliberate taps (not swipes) centered on the button.
 
-### Serial Monitor Doesnâ€™t Resume After Reset
+### Serial Monitor Doesn't Resume After Reset
 
 - Some setups require closing/reopening the serial monitor after reset.
 - Always report the firmware version shown on splash if you see inconsistent serial behavior.
 
-### MODE Doesnâ€™t Apply
+### MODE Doesn't Apply
 
 - Ensure you press `CONFIRM`, then keep the device still until the countdown finishes.
 - If you move, the countdown may reset (by design).
@@ -167,7 +167,7 @@ Serial and touch workflows are designed to stay synchronized.
 
 ## 8) Beta Tester Checklist + Feedback
 
-If youâ€™re testing externally, use:
+If you're testing externally, use:
 
 - `../release/beta-checklist.md`
 - `../release/tester-handoff-note.md`
