@@ -12,7 +12,7 @@ UI Framework Diagram (Current)
   - orientationMode, displayRotated, freeze state
   - ALIGN workflow state (6-step capture)
   - MODE workflow state (pending/confirmed/target/countdown)
-  - BOOT button timing and action mapping
+  - ACTION-button timing and action mapping
 - ui_lvgl.cpp renders and drives UI events against shared APIs.
 
 
@@ -25,7 +25,7 @@ Touch UI
 Serial
 - z, c, C, u, v, m, x, a, r
 
-BOOT (GPIO0)
+ACTION button (GPIO0, labeled BOOT/GPO)
 - ALIGN: short release -> capture
 - MODE workflow: short release -> confirm, long release -> cancel
 - Normal: short -> freeze, long -> axis, very-long -> mode toggle

@@ -21,3 +21,7 @@ tools/
 
 # Manual build artifacts
 docs/manual/dist/
+
+# Local hardware bundles (keep out of GitHub)
+docs/hardware/*.zip
+docs/hardware/*.rar

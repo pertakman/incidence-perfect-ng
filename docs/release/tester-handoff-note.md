@@ -10,14 +10,14 @@
 
 1. Normal measurement flow (`ZERO`, `AXIS`, `MODE`, `ROTATE`).
 2. Guided `ALIGN` workflow end-to-end.
-3. BOOT button actions (short/long/very-long hold).
+3. ACTION button actions (short/long/very-long hold).
 4. Freeze behavior and responsiveness.
 5. Reboot/power-cycle persistence.
 
 ## Quick Controls
 
 - Touch buttons: `ZERO`, `AXIS`, `MODE`, `ALIGN`, `ROTATE`
-- BOOT:
+- ACTION button:
   - normal: short = freeze, long = axis, very-long = mode
   - align: press = capture
   - mode guide: short = confirm, long = cancel

@@ -81,6 +81,56 @@ $src = $src.Replace("{{FW_VERSION}}", $fw)
 $src = $src.Replace("{{MANUAL_DATE}}", $date)
 $src = $src.Replace("{{GIT_DESCRIBE}}", $rev)
 
+function Copy-ManualImageAssets {
+    param(
+        [string]$Markdown,
+        [string]$ManualDir,
+        [string]$OutDir
+    )
+
+    $imgRegex = '!\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)'
+    $htmlImgRegex = '<img[^>]*\ssrc=["'']([^"'']+)["''][^>]*>'
+    $assetMap = @{}
+
+    $allPaths = New-Object System.Collections.Generic.List[string]
+
+    $mdMatches = [regex]::Matches($Markdown, $imgRegex)
+    foreach ($m in $mdMatches) {
+        $allPaths.Add($m.Groups[1].Value.Trim())
+    }
+
+    $htmlMatches = [regex]::Matches($Markdown, $htmlImgRegex)
+    foreach ($m in $htmlMatches) {
+        $allPaths.Add($m.Groups[1].Value.Trim())
+    }
+
+    foreach ($rawPath in $allPaths) {
+        if ([string]::IsNullOrWhiteSpace($rawPath)) { continue }
+        if ($rawPath.StartsWith("http://") -or $rawPath.StartsWith("https://") -or $rawPath.StartsWith("data:")) { continue }
+        if ($rawPath.StartsWith("#")) { continue }
+
+        $resolved = $null
+        try {
+            $resolved = (Resolve-Path (Join-Path $ManualDir $rawPath)).Path
+        } catch {
+            $resolved = $null
+        }
+        if (-not $resolved -or -not (Test-Path $resolved)) { continue }
+
+        $destLeaf = [IO.Path]::GetFileName($resolved)
+
+        Copy-Item -Force $resolved (Join-Path $OutDir $destLeaf)
+        $assetMap[$rawPath] = $destLeaf
+    }
+
+    foreach ($k in $assetMap.Keys) {
+        $Markdown = $Markdown.Replace("($k)", "($($assetMap[$k]))")
+        $Markdown = $Markdown.Replace("src=`"$k`"", "src=`"$($assetMap[$k])`"")
+        $Markdown = $Markdown.Replace("src='$k'", "src='$($assetMap[$k])'")
+    }
+    return $Markdown
+}
+
 # Make the cover image link robust by copying it into the output folder.
 $manualDir = Split-Path (Resolve-Path $ManualPath).Path -Parent
 $coverRel = "../assets/splash-screens/device/splash_screen_OLED_optimized_2_536x240.png"
@@ -95,6 +145,8 @@ if ($coverPath -and (Test-Path $coverPath)) {
     Copy-Item -Force $coverPath $coverOut
     $src = $src.Replace("($coverRel)", "(cover.png)")
 }
+
+$src = Copy-ManualImageAssets -Markdown $src -ManualDir $manualDir -OutDir $OutDir
 
 $outMd = Join-Path $OutDir ("Incidence-Perfect-NG-Manual-$fw.md")
 $outHtml = Join-Path $OutDir ("Incidence-Perfect-NG-Manual-$fw.html")

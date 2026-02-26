@@ -37,6 +37,7 @@ bool modeWorkflowIsActive(void);
 bool modeWorkflowIsConfirmed(void);
 OrientationMode modeWorkflowTarget(void);
 float modeWorkflowRemainingSeconds(void);
+float modeWorkflowProgressPercent(void);
 void modeWorkflowStart(OrientationMode target);
 void modeWorkflowStartToggle(void);
 void modeWorkflowConfirm(void);

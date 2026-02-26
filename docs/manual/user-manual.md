@@ -34,7 +34,8 @@ Incidence Perfect NG is a compact 2-axis inclinometer/incidence meter built arou
 Use when the tool is resting in the reference position.
 
 - Tap `ZERO`.
-- A brief confirmation message appears.
+- A brief confirmation message appears (`Zero applied - hold still briefly`).
+- A short progress bar is shown while zero is being applied.
 - Values settle around `0.00`.
 
 ### AXIS
@@ -59,9 +60,12 @@ Use freeze when you want to capture a reading without chasing tiny motion.
 
 ---
 
-## 3) BOOT Button (Physical Control)
+## 3) ACTION Button (Physical Control)
 
-The board has a physical **BOOT** button (`GPIO0`, active-low). It mirrors key actions so you can operate the device when the screen is hard to reach.
+<div class="action-button-intro">
+  <p>The board has a physical <strong>ACTION button</strong> (electrically <code>GPIO0</code>, labeled <code>BOOT/GPO</code> on the board). It mirrors key actions so you can operate the device when the screen is hard to reach.</p>
+  <p><img src="../assets/action-button-reference.png" alt="ACTION button reference"/></p>
+</div>
 
 In normal measurement mode:
 
@@ -69,7 +73,8 @@ In normal measurement mode:
 - **Long press (~1.2s)**: cycle `AXIS` (`BOTH -> ROLL -> PITCH`)
 - **Very long press (~2.2s)**: enter/toggle `MODE` workflow (orientation change)
 
-While holding BOOT, an on-screen hint shows what will happen on release and a progress indicator for the next threshold.
+While holding the ACTION button, an on-screen hint shows what will happen on release and a progress indicator for the next threshold.
+Countdowns are shown as `X.X s` (with a space before `s`).
 
 ---
 
@@ -83,12 +88,15 @@ While holding BOOT, an on-screen hint shows what will happen on release and a pr
 ### Touch Workflow
 
 1. Tap `MODE` once to enter the guided workflow.
-2. The UI shows which orientation to position the device into (target).
+2. The UI shows the required repositioning target:
+   - `Reposition with screen facing up`, or
+   - `Reposition with screen vertically`
 3. Tap `CONFIRM`, then **hold the device still**.
-4. A countdown appears; when it reaches zero, the new mode auto-applies.
-5. Tap `CANCEL` at any time to abort without changes.
+4. A hold timer appears as `Hold still X.X s`, with a progress bar.
+5. Near completion, the UI switches to `Applying...` and then auto-applies the new mode.
+6. Tap `CANCEL` at any time to abort without changes.
 
-### BOOT in MODE Workflow
+### ACTION Button in MODE Workflow
 
 - Short press: `CONFIRM`
 - Long press: `CANCEL`
@@ -109,11 +117,11 @@ This is a guided, 6-orientation capture procedure. The device will prompt you th
 4. Repeat until all steps are captured.
 5. Tap `CANCEL` to abort safely at any time.
 
-### BOOT in ALIGN Workflow
+### ACTION Button in ALIGN Workflow
 
 If the screen is hard to access (for example screen-down steps):
 
-- BOOT short press = `CAPTURE`
+- ACTION button short press = `CAPTURE`
 
 ---
 
@@ -141,7 +149,7 @@ Serial and touch workflows are designed to stay synchronized.
 
 ### Touch Feels Hard To Trigger
 
-- Use BOOT alternatives for critical actions.
+- Use ACTION button alternatives for critical actions.
 - Try deliberate taps (not swipes) centered on the button.
 
 ### Serial Monitor Doesn't Resume After Reset
@@ -151,7 +159,7 @@ Serial and touch workflows are designed to stay synchronized.
 
 ### MODE Doesn't Apply
 
-- Ensure you press `CONFIRM`, then keep the device still until the countdown finishes.
+- Ensure you press `CONFIRM`, then keep the device still until `Applying...` appears and the mode change completes.
 - If you move, the countdown may reset (by design).
 
 ---

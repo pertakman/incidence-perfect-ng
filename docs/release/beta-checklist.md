@@ -18,10 +18,10 @@ Use this checklist before delivering firmware to external beta testers.
 
 - [ ] `ZERO` applies and readings stabilize.
 - [ ] `AXIS` cycles `BOTH -> ROLL -> PITCH`.
-- [ ] `MODE` workflow works from touch, serial, and BOOT interactions.
+- [ ] `MODE` workflow works from touch, serial, and ACTION-button interactions.
 - [ ] `ROTATE` toggles 180 degrees and persists over reboot.
-- [ ] `ALIGN` 6-step capture flow completes (touch + BOOT capture).
-- [ ] Freeze toggle works from touch readout and BOOT short press.
+- [ ] `ALIGN` 6-step capture flow completes (touch + ACTION-button capture).
+- [ ] Freeze toggle works from touch readout and ACTION-button short press.
 - [ ] Serial and on-screen workflows stay synchronized.
 
 ## 4) Persistence And Reboot

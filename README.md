@@ -55,7 +55,7 @@ Touch UI and serial now share the same MODE workflow state, so actions in one in
 
 ## Hardware Controls
 
-- `BOOT` button (`GPIO0`, active-low):
+- `ACTION button` (`GPIO0`, active-low, labeled `BOOT/GPO` on board):
   - In ALIGN workflow: press/release = `CAPTURE`
   - In MODE workflow: short press = `CONFIRM`, long press = `CANCEL`
   - In normal mode short press: toggle freeze (`LIVE` <-> `FROZEN`)
@@ -71,7 +71,7 @@ Touch UI and serial now share the same MODE workflow state, so actions in one in
     - first press opens mode guidance with target orientation and changes `MODE` to `CONFIRM`,
     - first `CONFIRM` starts stillness countdown,
     - mode change auto-applies after countdown completes,
-    - `ZERO` or BOOT long-press cancels a pending mode change.
+    - `ZERO` or ACTION-button long-press cancels a pending mode change.
 
 ### `c` vs `C`
 
@@ -150,8 +150,8 @@ Examples:
 2. UX and control polish
 - Status: Partial
 - Done:
-  - BOOT hold hint readability improved from field feedback.
-  - On-screen BOOT long-press progress indicator added for short/long/very-long thresholds.
+  - ACTION-button hold hint readability improved from field feedback.
+  - On-screen ACTION-button long-press progress indicator added for short/long/very-long thresholds.
 - Remaining:
   - Tune `MODE` guided workflow timing (`MODE_STILL_MS`, motion threshold) from real usage.
 

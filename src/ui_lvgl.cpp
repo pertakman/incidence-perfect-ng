@@ -137,6 +137,7 @@ static lv_obj_t *label_btn_mode;
 static lv_obj_t *label_btn_align;
 static lv_obj_t *label_btn_rotate;
 static uint32_t zero_feedback_until_ms = 0;
+static uint32_t zero_feedback_start_ms = 0;
 
 static const char *axis_mode_text()
 {
@@ -188,6 +189,17 @@ static void update_alignment_instruction()
   lv_label_set_text(label_instruction, buf);
 }
 
+static float countdown_display_seconds(float seconds_remaining)
+{
+  if (seconds_remaining <= 0.0f) return 0.0f;
+  // Bias slightly upward so display cadence/loop jitter never shows 0.0s
+  // before the underlying action has actually transitioned.
+  seconds_remaining += 0.02f;
+  float rounded_up = ceilf(seconds_remaining * 10.0f) / 10.0f;
+  if (rounded_up < 0.1f) rounded_up = 0.1f;
+  return rounded_up;
+}
+
 static void update_boot_hint_label()
 {
   static char last[96] = "";
@@ -208,13 +220,13 @@ static void update_boot_hint_label()
       if (bootHoldIsActive()) {
         const unsigned long hold_ms = bootHoldDurationMs();
         if (hold_ms < 1200) {
-          const float to_cancel = (1200 - hold_ms) / 1000.0f;
+          const float to_cancel = countdown_display_seconds((1200 - hold_ms) / 1000.0f);
           snprintf(buf, sizeof(buf),
-                   "BOOT: Release=CONFIRM | CANCEL in %.1fs",
+                   "ACTION: release = CONFIRM | CANCEL in %.1f s",
                    to_cancel);
           progress_pct = (int)((hold_ms * 100UL) / 1200UL);
         } else {
-          snprintf(buf, sizeof(buf), "BOOT: Release=CANCEL");
+          snprintf(buf, sizeof(buf), "ACTION: release = CANCEL");
           progress_pct = 100;
         }
       } else {
@@ -222,14 +234,26 @@ static void update_boot_hint_label()
       }
     } else {
       const float rem = modeWorkflowRemainingSeconds();
-      if (rem > 0.0f) {
-        snprintf(buf, sizeof(buf), "Hold still %.1fs", rem);
+      // Flip to "Applying..." a tick before zero to avoid a stale final
+      // countdown frame when the action completion is in-flight.
+      if (rem > 0.10f) {
+        const float rem_show = countdown_display_seconds(rem);
+        snprintf(buf, sizeof(buf), "Hold still %.1f s", rem_show);
+        progress_pct = (int)modeWorkflowProgressPercent();
       } else {
         snprintf(buf, sizeof(buf), "Applying...");
+        progress_pct = 100;
       }
     }
   } else if (now_ms < zero_feedback_until_ms) {
-    snprintf(buf, sizeof(buf), "ZERO APPLIED - hold still briefly");
+    snprintf(buf, sizeof(buf), "Zero applied - hold still briefly");
+    const uint32_t duration_ms = zero_feedback_until_ms - zero_feedback_start_ms;
+    const uint32_t elapsed_ms = now_ms - zero_feedback_start_ms;
+    if (duration_ms > 0) {
+      progress_pct = (int)((elapsed_ms * 100UL) / duration_ms);
+    } else {
+      progress_pct = 100;
+    }
   } else if (!bootHoldIsActive()) {
     lv_obj_add_flag(boot_hint_box, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(boot_hint_progress, LV_OBJ_FLAG_HIDDEN);
@@ -239,17 +263,17 @@ static void update_boot_hint_label()
 
   if (ui_state == UI_STATE_NORMAL && now_ms >= zero_feedback_until_ms) {
     const unsigned long hold_ms = bootHoldDurationMs();
-    const float to_axis = (hold_ms < 1200) ? (1200 - hold_ms) / 1000.0f : 0.0f;
-    const float to_mode = (hold_ms < 2200) ? (2200 - hold_ms) / 1000.0f : 0.0f;
+    const float to_axis = (hold_ms < 1200) ? countdown_display_seconds((1200 - hold_ms) / 1000.0f) : 0.0f;
+    const float to_mode = (hold_ms < 2200) ? countdown_display_seconds((2200 - hold_ms) / 1000.0f) : 0.0f;
 
     if (hold_ms < 1200) {
       snprintf(buf, sizeof(buf),
-               "Release: FREEZE | AXIS in %.1fs",
+               "Release: FREEZE | AXIS in %.1f s",
                to_axis);
       progress_pct = (int)((hold_ms * 100UL) / 2200UL);
     } else if (hold_ms < 2200) {
       snprintf(buf, sizeof(buf),
-               "Release: AXIS | MODE in %.1fs",
+               "Release: AXIS | MODE in %.1f s",
                to_mode);
       progress_pct = (int)((hold_ms * 100UL) / 2200UL);
     } else {
@@ -456,6 +480,7 @@ static void on_zero_pressed(lv_event_t *)
 
   if (ui_state == UI_STATE_NORMAL) {
     setZeroReference();
+    zero_feedback_start_ms = millis();
     zero_feedback_until_ms = millis() + 1400;
   }
   else {

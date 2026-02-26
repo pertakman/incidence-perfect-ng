@@ -58,18 +58,18 @@ Tester: Per Takman
 ## Sign-off
 
 - Baseline status: IN PROGRESS
-- Next action: Re-run against updated checklist IDs T10-T29 (guided MODE, BOOT roles, freeze immediacy, and touch/serial sync).
+- Next action: Re-run against updated checklist IDs T10-T29 (guided MODE, ACTION-button roles, freeze immediacy, and touch/serial sync).
 
 ## Additional Test Coverage To Include (Current UI/FW)
 
 - Guided MODE workflow parity:
   - touch-started workflow must appear in serial prompts
   - serial-started workflow must appear on-screen
-  - `CONFIRM`/`CANCEL` parity across touch, BOOT, and serial (`c`/`x`)
+  - `CONFIRM`/`CANCEL` parity across touch, ACTION button, and serial (`c`/`x`)
 - MODE auto-apply behavior:
   - hold-still countdown resets on movement
   - mode applies automatically when timer completes
-- BOOT role matrix:
+- ACTION-button role matrix:
   - Normal mode: short/long/very-long actions
   - MODE workflow: short=confirm, long=cancel
   - ALIGN workflow: capture

@@ -209,7 +209,7 @@ void setup_inclinometer() {
 
   Serial.print("\nQMI8658 Inclinometer FW ");
   Serial.println(FW_VERSION);
-  Serial.println("BOOT button mapped to GPIO0 (active-low)");
+  Serial.println("ACTION button mapped to GPIO0 (BOOT, active-low)");
 
   // IMU configuration (kept intentionally conservative)
   imu.begin(Wire, QMI8658_ADDRESS_HIGH);
@@ -519,7 +519,7 @@ void printAlignmentInstruction() {
     Serial.println(hint);
   }
   Serial.println("Press CAPTURE (touch) or send 'c' (serial)");
-  Serial.println("Tip: BOOT = CAPTURE");
+  Serial.println("Tip: ACTION button = CAPTURE");
 }
 
 void alignmentGetInstruction(char *buf, unsigned int buf_size) {
@@ -528,7 +528,7 @@ void alignmentGetInstruction(char *buf, unsigned int buf_size) {
     buf[0] = '\0';
     return;
   }
-  const char *boot_hint = "Tip: BOOT = CAPTURE";
+  const char *boot_hint = "Tip: ACTION button = CAPTURE";
   const char *hint = alignmentStepHintText(alignState.step);
   if (hint[0] != '\0') {
     snprintf(
@@ -571,9 +571,9 @@ void alignmentStart(void) {
   alignState.p_bd = 0.0f;
   alignState.p_td = 0.0f;
 
-  Serial.print("\nALIGNMENT FW ");
+  Serial.print("\nAlignment FW ");
   Serial.print(FW_VERSION);
-  Serial.println(" (6 ORIENTATIONS)");
+  Serial.println(" (6 orientations)");
   printAlignmentInstruction();
 }
 
@@ -589,11 +589,11 @@ void modeWorkflowStart(OrientationMode target) {
   modeTargetState = target;
 
   Serial.println();
-  Serial.println("MODE WORKFLOW");
-  Serial.print("Position with ");
+  Serial.println("Mode workflow");
+  Serial.print("Reposition with ");
   Serial.println(target == MODE_SCREEN_VERTICAL ? "SCREEN VERTICAL" : "SCREEN UP");
   Serial.println("Send 'c' to CONFIRM and hold still");
-  Serial.println("Send 'x' to CANCEL");
+  Serial.println("Send 'x' to cancel");
 }
 
 void modeWorkflowStartToggle(void) {
@@ -610,7 +610,7 @@ void modeWorkflowConfirm() {
   modeStartMs = millis();
   modeRefRoll = roll_phys;
   modeRefPitch = pitch_phys;
-  Serial.println("MODE CONFIRMED. Hold still...");
+  Serial.println("Mode confirmed. Hold still...");
 }
 
 void modeWorkflowCancel() {
@@ -659,6 +659,14 @@ float modeWorkflowRemainingSeconds(void) {
   const unsigned long elapsed = now - modeStartMs;
   if (elapsed >= modeStillMs) return 0.0f;
   return (float)(modeStillMs - elapsed) / 1000.0f;
+}
+
+float modeWorkflowProgressPercent(void) {
+  if (!modePending || !modeConfirmed) return 0.0f;
+  const unsigned long now = millis();
+  const unsigned long elapsed = now - modeStartMs;
+  if (elapsed >= modeStillMs) return 100.0f;
+  return ((float)elapsed * 100.0f) / (float)modeStillMs;
 }
 
 void finalizeAlignment() {

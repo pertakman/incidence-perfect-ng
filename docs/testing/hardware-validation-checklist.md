@@ -40,11 +40,11 @@ Use this checklist against the current firmware build to establish a known-good 
 | T16 | In serial monitor send `c` while stationary | Recalibration runs; readings settle after completion |  |  |
 | T17 | Tap `ROTATE` | Full UI rotates 180 deg and status `ROT` updates |  |  |
 | T18 | In MODE workflow press `CONFIRM` and hold still | Countdown appears and orientation auto-applies at end of timer |  |  |
-| T19 | In MODE workflow use BOOT short press | Acts as `CONFIRM` |  |  |
-| T20 | In MODE workflow use BOOT long press | Acts as `CANCEL` |  |  |
-| T21 | In normal mode BOOT short press | Toggles freeze (`LIVE` <-> `FROZEN`) |  |  |
-| T22 | In normal mode BOOT long press (~1.2s) | Triggers `AXIS` cycle |  |  |
-| T23 | In normal mode BOOT very long press (~2.2s) | Starts/toggles MODE orientation workflow |  |  |
+| T19 | In MODE workflow use ACTION button short press | Acts as `CONFIRM` |  |  |
+| T20 | In MODE workflow use ACTION button long press | Acts as `CANCEL` |  |  |
+| T21 | In normal mode ACTION button short press | Toggles freeze (`LIVE` <-> `FROZEN`) |  |  |
+| T22 | In normal mode ACTION button long press (~1.2s) | Triggers `AXIS` cycle |  |  |
+| T23 | In normal mode ACTION button very long press (~2.2s) | Starts/toggles MODE orientation workflow |  |  |
 | T24 | Tap readout area | Freeze toggles immediately; displayed values hold instantly (no lag) |  |  |
 | T25 | Touch-start MODE and monitor serial | Serial prompt reflects same target/pending state |  |  |
 | T26 | Serial-start MODE (`m`/`u`/`v`) and observe screen | Screen enters MODE workflow with matching target text |  |  |
