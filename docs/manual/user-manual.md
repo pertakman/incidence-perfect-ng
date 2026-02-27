@@ -129,6 +129,14 @@ This is a guided, 6-orientation capture procedure. The device will prompt you th
 3. Tap `CAPTURE` to record that step.
 4. Repeat until all steps are captured.
 5. Tap `CANCEL` to abort safely at any time.
+6. After step 6, ALIGN completes immediately and returns to normal operation.
+
+Important:
+
+- ALIGN and RECAL are separate operations.
+- ALIGN does **not** run RECAL automatically.
+- Run guided `RECAL` separately in the active `MODE` when needed.
+- If you use both `SCREEN UP` and `SCREEN VERTICAL`, run `RECAL` in each mode so both mode-specific references are updated.
 
 ### ACTION Button in ALIGN Workflow
 

@@ -164,7 +164,6 @@ enum AlignmentStep {
 
 struct AlignmentWorkflowState {
   bool active;
-  bool awaitingRecal;
   AlignmentStep step;
   float r_up, p_up;
   float r_down, p_down;
@@ -175,7 +174,6 @@ struct AlignmentWorkflowState {
 };
 
 static AlignmentWorkflowState alignState = {
-  false,
   false,
   ALIGN_SCREEN_UP,
   0, 0, 0, 0, 0, 0, 0, 0
@@ -492,14 +490,6 @@ void handleSerial() {
 void alignmentCapture(void)
 {
   if (!alignState.active) {
-    return;
-  }
-  if (alignState.awaitingRecal) {
-    recalibrationWorkflowStart();
-    recalibrationWorkflowConfirm();
-    alignState.awaitingRecal = false;
-    alignState.active = false;
-    Serial.println("Alignment final recalibration started");
     return;
   }
   if (alignCaptureState.active) {
@@ -869,14 +859,6 @@ const char *alignmentStepHintText(AlignmentStep step) {
 
 void printAlignmentInstruction() {
   if (!alignState.active) return;
-  if (alignState.awaitingRecal) {
-    Serial.println();
-    Serial.println("ALIGN 7/7");
-    Serial.println("Place tool: SCREEN UP");
-    Serial.println("Press CAPTURE to apply final recalibration");
-    Serial.println("Tip: ACTION button = CAPTURE");
-    return;
-  }
   Serial.println();
   Serial.print("ALIGN ");
   Serial.print((int)alignState.step + 1);
@@ -896,14 +878,6 @@ void alignmentGetInstruction(char *buf, unsigned int buf_size) {
   if (!buf || buf_size == 0) return;
   if (!alignState.active) {
     buf[0] = '\0';
-    return;
-  }
-  if (alignState.awaitingRecal) {
-    snprintf(
-      buf,
-      buf_size,
-      "ALIGN 7/7\nPlace tool: SCREEN UP\nPress CAPTURE to apply final recalibration"
-    );
     return;
   }
   if (alignCaptureState.active) {
@@ -947,7 +921,6 @@ void alignmentStart(void) {
   }
 
   alignState.active = true;
-  alignState.awaitingRecal = false;
   alignState.step = ALIGN_SCREEN_UP;
   alignState.r_up = 0.0f;
   alignState.p_up = 0.0f;
@@ -967,7 +940,6 @@ void alignmentStart(void) {
 
 void alignmentCancel(void) {
   if (!alignState.active) return;
-  alignState.awaitingRecal = false;
   alignCaptureState.active = false;
   alignState.active = false;
   Serial.println("Alignment canceled");
@@ -1167,9 +1139,8 @@ void finalizeAlignment() {
   EEPROM.put(EEPROM_ADDR_ALIGN + 4, align_pitch);
   EEPROM.commit();
 
-  alignState.awaitingRecal = true;
+  alignState.active = false;
   Serial.println("Alignment complete (offsets saved)");
-  Serial.println("Final step: place SCREEN UP and CAPTURE to recalibrate");
   Serial.print("  align_roll=");
   Serial.print(align_roll, 3);
   Serial.print("  align_pitch=");

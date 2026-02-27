@@ -59,7 +59,7 @@ Use this checklist against the current firmware build to establish a known-good 
 1. Send `C` in serial monitor.
 2. Follow prompts and press `c` at each requested orientation.
 3. Confirm `Alignment complete` prints.
-4. Complete final recalibration step (`ALIGN 7/7`) and verify return to normal operation.
+4. Verify return to normal operation immediately after the 6th capture.
 
 Expected:
 
