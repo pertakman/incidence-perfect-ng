@@ -22,6 +22,27 @@ This repo is now configured as a PlatformIO project for VS Code.
    - PlatformIO sidebar -> `Monitor`
    - or terminal: `pio device monitor -b 115200`
 
+## Required Dependencies And Tooling
+
+Firmware build/runtime dependencies:
+- `PlatformIO Core` (installed via VS Code PlatformIO extension)
+- `espressif32` platform (`platform = espressif32`, currently `6.12.0` in lockstep with project environment)
+- `framework = arduino` for ESP32-S3
+- Libraries from `platformio.ini`:
+  - `lvgl/lvgl @ ^8.4.0`
+  - `moononournation/GFX Library for Arduino @ 1.3.8`
+  - `QMI8658` from local path: `file://C:/dev/Arduino/Libraries/QMI8658`
+
+Important local dependency note:
+- This project currently expects `QMI8658` at `C:/dev/Arduino/Libraries/QMI8658`.
+- If your path differs, update `lib_deps` in `platformio.ini` accordingly.
+
+Optional documentation/splash tooling:
+- `PowerShell` (used for helper scripts in `scripts/`)
+- `pandoc` (auto-managed by `scripts/ensure_pandoc.ps1` into `tools/pandoc/`)
+- Headless Chrome/Edge (used by `scripts/build_manual_pdf.ps1` for PDF rendering)
+- `System.Drawing` support in PowerShell/.NET (used by `scripts/generate_splash.ps1`)
+
 ## Fresh Unit Preparation
 
 Use this before first-time flashing a new hardware unit.
@@ -37,42 +58,48 @@ Use this before first-time flashing a new hardware unit.
    - `ZERO` works
    - `AXIS` cycles (`BOTH -> ROLL -> PITCH`)
    - `MODE` toggles orientation (`SCREEN UP <-> SCREEN VERTICAL`)
+   - `RECAL` workflow can be started (touch long-press `ZERO`, serial `k` or `c`, web `RECAL`)
    - `ROTATE` flips 180 and persists after reboot
 
 ## Serial Commands
 
-- `z`: set zero reference from current position
-- `c`: quick sensor recalibration (`calibrateOffsets()` + `initializeAngles()`) when not aligning; during alignment it captures the current step
+- `z`: start guided zero workflow (`c` to confirm, `x` to cancel)
+- `c`: context action
+  - ALIGN active: capture current ALIGN step
+  - ZERO pending: confirm ZERO
+  - RECAL pending: confirm RECAL
+  - otherwise: start + confirm guided RECAL
 - `k`: start guided recalibration workflow (confirm with `c`, cancel with `x`)
 - `C`: start guided 6-step mechanical alignment workflow (shared by touch UI and serial)
-- `u`: start guided mode change targeting `SCREEN UP` (confirm with `c`, cancel with `x`)
-- `v`: start guided mode change targeting `SCREEN VERTICAL` (confirm with `c`, cancel with `x`)
-- `m`: start guided mode change targeting the opposite orientation (confirm with `c`, cancel with `x`)
-- `x`: cancel pending serial-guided mode change
+- `u`: set orientation mode to `SCREEN UP` immediately
+- `v`: set orientation mode to `SCREEN VERTICAL` immediately
+- `m`: toggle orientation mode immediately
+- `x`: cancel pending RECAL / ALIGN
 
-Touch UI and serial now share the same MODE workflow state, so actions in one interface are reflected in the other.
+Touch UI, serial, ACTION button, and web share the same ZERO/RECAL/ALIGN state.
 - `a`: cycle axis display/output (`BOTH -> ROLL -> PITCH`)
 - `r`: toggle 180-degree screen rotation
+- `d`: toggle raw IMU debug stream (5 Hz)
 
 ## Hardware Controls
 
 - `ACTION button` (`GPIO0`, active-low, labeled `BOOT/GPO` on board):
   - In ALIGN workflow: press/release = `CAPTURE`
-  - In MODE workflow: short press = `CONFIRM`, long press = `CANCEL`
+  - In ZERO workflow: short press = `CONFIRM`, long press = `CANCEL`
+  - In RECAL workflow: short press = `CONFIRM`, long press = `CANCEL`
   - In normal mode short press: toggle freeze (`LIVE` <-> `FROZEN`)
   - In normal mode long press (~1.2s): cycle axis (`BOTH -> ROLL -> PITCH`)
   - In normal mode very long press (~2.2s): toggle orientation (`SCREEN UP` <-> `SCREEN VERTICAL`)
+  - In normal mode ultra long press (~3.2s): start RECAL workflow
   - While holding in normal mode, an on-screen hint shows the release action and countdown to the next action threshold.
 - Touch readout area:
   - Tap the roll/pitch value area to toggle freeze (`LIVE` <-> `FROZEN`)
 - UI behavior:
-  - `ZERO` shows a short on-screen confirmation (`ZERO APPLIED - hold still briefly`).
+  - `ZERO` is guided (`CONFIRM`/`CANCEL`, stillness timer + averaging progress bar).
+  - `ZERO` long press starts RECAL workflow.
   - Button touch targets are extended to improve tap reliability.
-  - `MODE` is guided:
-    - first press opens mode guidance with target orientation and changes `MODE` to `CONFIRM`,
-    - first `CONFIRM` starts stillness countdown,
-    - mode change auto-applies after countdown completes,
-    - `ZERO` or ACTION-button long-press cancels a pending mode change.
+  - `MODE` is immediate (loads mode-specific calibration/zero settings from EEPROM).
+  - RECAL is guided (`CONFIRM`/`CANCEL`, stillness timer + progress bar).
 
 ## Remote Control (Phase A)
 
@@ -93,32 +120,36 @@ Available in Phase A:
   - `AXIS`
   - `FREEZE`
   - `ROTATE`
-  - `RECAL` (same as serial `c` when not in workflows)
-  - `MODE` start + `CONFIRM` + `CANCEL`
+  - `RECAL` workflow (`RECAL` -> `CONFIRM`/`CANCEL`)
+  - `MODE` immediate toggle or direct set
   - `ALIGN` start + `CAPTURE` + `CANCEL`
 - Context-aware controls:
-  - `CONFIRM`/`CANCEL` are shown only during MODE workflow
+  - `CONFIRM`/`CANCEL` are shown only during ZERO/RECAL workflows
   - `CAPTURE`/`CANCEL` are shown only during ALIGN workflow
 - Progress bar:
-  - MODE hold-still progress
+  - ZERO hold/sampling progress
+  - RECAL hold/sampling progress
   - ALIGN capture progress
 - Workflow sync is shared across touch, serial, ACTION button, and web.
 
 API endpoints:
 - `GET /api/state`
-- `POST /api/cmd` with JSON body: `{"cmd":"zero"|"axis"|"freeze"}`
 - `POST /api/cmd` with JSON body:
   - `{"cmd":"zero"|"axis"|"freeze"|"rotate"}`
-  - `{"cmd":"recal"|"confirm"|"cancel"}` (`recal` opens guided recalibration workflow)
-  - `{"cmd":"mode_toggle"|"mode_up"|"mode_vertical"|"confirm"|"cancel"}`
-  - `{"cmd":"align_start"|"capture"}`
+  - `{"cmd":"recal"|"confirm"|"cancel"}` (`zero`/`recal` open guided workflows; `confirm`/`cancel` act on active workflow)
+  - `{"cmd":"mode_toggle"|"mode_up"|"mode_vertical"}`
+  - `{"cmd":"align_start"|"capture"|"cancel"}`
 - `GET /health`
 
 ### `c` vs `C`
 
-- Use `c` for quick recalibration when values drift or after a temperature/stability change.
+- Use `c` for context action:
+  - in ZERO it confirms,
+  - in normal mode it starts+confirms guided RECAL,
+  - in RECAL it confirms,
+  - in ALIGN it captures.
 - Use `C` when you need full mechanical alignment (mounting/enclosure bias correction).
-- In short: `c` is fast sensor re-zero; `C` is full alignment procedure.
+- In short: `c` handles guided runtime recalibration actions; `C` is full alignment procedure.
 
 ## Versioning Policy
 
@@ -192,14 +223,14 @@ Examples:
 - Status: Partial
 - Done:
   - ACTION-button hold hint readability improved from field feedback.
-  - On-screen ACTION-button long-press progress indicator added for short/long/very-long thresholds.
+  - On-screen ACTION-button long-press progress indicator added for short/long/very-long/ultra-long thresholds.
 - Remaining:
-  - Tune `MODE` guided workflow timing (`MODE_STILL_MS`, motion threshold) from real usage.
+  - Tune ACTION hold thresholds from real usage (`~1.2s / ~2.2s / ~3.2s`).
 
 3. Documentation cleanup
 - Status: Done
 - Completed:
-  - `docs/testing/hardware-validation-checklist.md` updated for guided MODE and full ALIGN flow.
+  - `docs/testing/hardware-validation-checklist.md` updated for guided ZERO/RECAL, immediate MODE, and full ALIGN flow.
   - `docs/testing/validation-session-template.md` updated with expanded current test matrix.
 
 4. Connectivity exploration
@@ -208,9 +239,8 @@ Examples:
   - Phase A foundation implemented:
     - AP mode phone access
     - web UI + API telemetry/state
-    - remote commands (`zero`, `axis`, `freeze`)
+    - remote commands (`zero`, `axis`, `freeze`, `rotate`, `recal`, `mode`, `align`)
 - Remaining:
-  - MODE/ALIGN remote command parity
   - STA mode + hostname (`.local`) onboarding
   - auth hardening and network test matrix
 - Plan document:

@@ -50,6 +50,16 @@
 #define EEPROM_ADDR_MODE       0
 #define EEPROM_ADDR_ROTATION   2
 #define EEPROM_ADDR_ALIGN      16   // stores: align_roll, align_pitch (floats)
+#define EEPROM_ADDR_BIAS_UP_MAGIC    24
+#define EEPROM_ADDR_BIAS_UP          28   // stores: ax,ay,az,gx,gy (floats)
+#define EEPROM_ADDR_BIAS_VERT_MAGIC  52
+#define EEPROM_ADDR_BIAS_VERT        56   // stores: ax,ay,az,gx,gy (floats)
+#define EEPROM_ADDR_ZERO_UP_MAGIC    80
+#define EEPROM_ADDR_ZERO_UP          84   // stores: roll_zero, pitch_zero (floats)
+#define EEPROM_ADDR_ZERO_VERT_MAGIC  92
+#define EEPROM_ADDR_ZERO_VERT        96   // stores: roll_zero, pitch_zero (floats)
+static const uint32_t EEPROM_BIAS_MAGIC = 0x42534131UL; // "BSA1"
+static const uint32_t EEPROM_ZERO_MAGIC = 0x5A455231UL; // "ZER1"
 
 // Complementary filter coefficient
 // Lower alpha = more accel trust, higher alpha = more gyro trust
@@ -100,6 +110,7 @@ static unsigned long bootHoldMs = 0;
 static const unsigned long bootBtnDebounceMs = 30;
 static const unsigned long bootBtnLongPressMs = 1200;
 static const unsigned long bootBtnVeryLongPressMs = 2200;
+static const unsigned long bootBtnUltraLongPressMs = 3200;
 static bool modePending = false;
 static bool modeConfirmed = false;
 static OrientationMode modeTargetState = MODE_SCREEN_UP;
@@ -121,11 +132,25 @@ static float recalSumAy = 0.0f;
 static float recalSumAz = 0.0f;
 static float recalSumGx = 0.0f;
 static float recalSumGy = 0.0f;
+static bool zeroPending = false;
+static bool zeroConfirmed = false;
+static bool zeroSampling = false;
+static unsigned long zeroStartMs = 0;
+static float zeroRefRoll = 0.0f;
+static float zeroRefPitch = 0.0f;
+static int zeroSampleCount = 0;
+static const int zeroSampleTarget = 40; // ~0.8 s at 20 ms loop
+static float zeroSumRoll = 0.0f;
+static float zeroSumPitch = 0.0f;
+static const unsigned long zeroStillMs = 1000;
+static const float zeroMotionThreshDeg = 0.4f;
 static float lastRawAx = 0.0f;
 static float lastRawAy = 0.0f;
 static float lastRawAz = 0.0f;
 static float lastRawGx = 0.0f;
 static float lastRawGy = 0.0f;
+static bool rawStreamEnabled = false;
+static unsigned long rawStreamLastMs = 0;
 
 enum AlignmentStep {
   ALIGN_SCREEN_UP = 0,
@@ -182,7 +207,12 @@ static const int alignCaptureSampleTarget = 25; // ~500 ms @ 20 ms loop
 // Forward declarations (required now that this file is compiled as C++)
 void calibrateOffsets();
 void initializeAngles();
+bool loadBiasOffsetsFromEeprom(OrientationMode mode);
+void saveBiasOffsetsToEeprom(OrientationMode mode);
+bool loadZeroReferenceFromEeprom(OrientationMode mode);
+void saveZeroReferenceToEeprom(OrientationMode mode);
 void printMode();
+void printRawImuSample(const QMI8658_Data &d, float ax, float ay, float az, float gx, float gy);
 void handleSerial();
 const char *alignmentStepText(AlignmentStep step);
 const char *alignmentStepHintText(AlignmentStep step);
@@ -192,6 +222,7 @@ void handleBootButton();
 void processModeWorkflow();
 void processAlignmentCapture();
 void processRecalibrationWorkflow();
+void processZeroWorkflow();
 void recalibrationWorkflowStart();
 void recalibrationWorkflowConfirm();
 void recalibrationWorkflowCancel();
@@ -272,7 +303,18 @@ void setup_inclinometer() {
   imu.enableGyro();
 
   // Initial calibration and zeroing
-  calibrateOffsets();
+  if (!loadBiasOffsetsFromEeprom(orientationMode)) {
+    calibrateOffsets();
+    saveBiasOffsetsToEeprom(orientationMode);
+  } else {
+    Serial.println("Loaded bias offsets from EEPROM");
+  }
+  if (!loadZeroReferenceFromEeprom(orientationMode)) {
+    roll_zero = 0.0f;
+    pitch_zero = 0.0f;
+  } else {
+    Serial.println("Loaded zero reference from EEPROM");
+  }
   initializeAngles();
 
   printMode();
@@ -344,11 +386,17 @@ void loop_inclinometer() {
   }
 
   processModeWorkflow();
+  processZeroWorkflow();
   processRecalibrationWorkflow();
   processAlignmentCapture();
 
   // Output
-  if (!alignmentIsActive() && !modePending && !recalPending) {
+  if (rawStreamEnabled) {
+    if ((now - rawStreamLastMs) >= 200) { // 5 Hz debug stream
+      printRawImuSample(d, ax, ay, az, gx, gy);
+      rawStreamLastMs = now;
+    }
+  } else if (!alignmentIsActive() && !modePending && !zeroPending && !recalPending) {
     switch (ui_axis_mode) {
       case AXIS_ROLL:
         Serial.print("Roll: ");
@@ -384,12 +432,28 @@ void handleSerial() {
   char c = Serial.read();
 
   switch (c) {
-    case 'z': setZeroReference(); break;
+    case 'z':
+      Serial.println("Serial 'z': start guided zero");
+      zeroWorkflowStart();
+      break;
     case 'c':
-      if (alignmentIsActive()) alignmentCapture();
-      else if (modePending && !modeConfirmed) modeWorkflowConfirm();
-      else if (recalPending && !recalConfirmed) recalibrationWorkflowConfirm();
-      else { runQuickRecalibration(); }
+      if (alignmentIsActive()) {
+        Serial.println("Serial 'c': CAPTURE");
+        alignmentCapture();
+      } else if (modePending && !modeConfirmed) {
+        Serial.println("Serial 'c': CONFIRM mode workflow");
+        modeWorkflowConfirm();
+      } else if (zeroPending && !zeroConfirmed) {
+        Serial.println("Serial 'c': CONFIRM zero workflow");
+        zeroWorkflowConfirm();
+      } else if (recalPending && !recalConfirmed) {
+        Serial.println("Serial 'c': CONFIRM recalibration workflow");
+        recalibrationWorkflowConfirm();
+      } else {
+        Serial.println("Serial 'c': guided recalibration start+confirm");
+        recalibrationWorkflowStart();
+        recalibrationWorkflowConfirm();
+      }
       break;
     case 'C': alignmentStart(); break;
     case 'u': modeWorkflowStart(MODE_SCREEN_UP); break;
@@ -397,11 +461,19 @@ void handleSerial() {
     case 'm': modeWorkflowStartToggle(); break;
     case 'x':
       modeWorkflowCancel();
+      zeroWorkflowCancel();
       recalibrationWorkflowCancel();
+      alignmentCancel();
       break;
     case 'k': recalibrationWorkflowStart(); break;
     case 'a': cycleAxisMode(); break;
     case 'r': toggleRotation(); break;
+    case 'd':
+      rawStreamEnabled = !rawStreamEnabled;
+      rawStreamLastMs = 0;
+      Serial.print("Raw IMU stream: ");
+      Serial.println(rawStreamEnabled ? "ON (5 Hz)" : "OFF");
+      break;
 
   }
 }
@@ -530,6 +602,74 @@ void calibrateOffsets() {
   gy_off=sgy/n;
 }
 
+bool loadBiasOffsetsFromEeprom(OrientationMode mode) {
+  const int magic_addr = (mode == MODE_SCREEN_VERTICAL)
+    ? EEPROM_ADDR_BIAS_VERT_MAGIC
+    : EEPROM_ADDR_BIAS_UP_MAGIC;
+  const int bias_addr = (mode == MODE_SCREEN_VERTICAL)
+    ? EEPROM_ADDR_BIAS_VERT
+    : EEPROM_ADDR_BIAS_UP;
+
+  uint32_t magic = 0;
+  EEPROM.get(magic_addr, magic);
+  if (magic != EEPROM_BIAS_MAGIC) return false;
+
+  EEPROM.get(bias_addr + 0,  ax_off);
+  EEPROM.get(bias_addr + 4,  ay_off);
+  EEPROM.get(bias_addr + 8,  az_off);
+  EEPROM.get(bias_addr + 12, gx_off);
+  EEPROM.get(bias_addr + 16, gy_off);
+  return true;
+}
+
+void saveBiasOffsetsToEeprom(OrientationMode mode) {
+  const int magic_addr = (mode == MODE_SCREEN_VERTICAL)
+    ? EEPROM_ADDR_BIAS_VERT_MAGIC
+    : EEPROM_ADDR_BIAS_UP_MAGIC;
+  const int bias_addr = (mode == MODE_SCREEN_VERTICAL)
+    ? EEPROM_ADDR_BIAS_VERT
+    : EEPROM_ADDR_BIAS_UP;
+
+  EEPROM.put(bias_addr + 0,  ax_off);
+  EEPROM.put(bias_addr + 4,  ay_off);
+  EEPROM.put(bias_addr + 8,  az_off);
+  EEPROM.put(bias_addr + 12, gx_off);
+  EEPROM.put(bias_addr + 16, gy_off);
+  EEPROM.put(magic_addr, EEPROM_BIAS_MAGIC);
+  EEPROM.commit();
+}
+
+bool loadZeroReferenceFromEeprom(OrientationMode mode) {
+  const int magic_addr = (mode == MODE_SCREEN_VERTICAL)
+    ? EEPROM_ADDR_ZERO_VERT_MAGIC
+    : EEPROM_ADDR_ZERO_UP_MAGIC;
+  const int zero_addr = (mode == MODE_SCREEN_VERTICAL)
+    ? EEPROM_ADDR_ZERO_VERT
+    : EEPROM_ADDR_ZERO_UP;
+
+  uint32_t magic = 0;
+  EEPROM.get(magic_addr, magic);
+  if (magic != EEPROM_ZERO_MAGIC) return false;
+
+  EEPROM.get(zero_addr + 0, roll_zero);
+  EEPROM.get(zero_addr + 4, pitch_zero);
+  return true;
+}
+
+void saveZeroReferenceToEeprom(OrientationMode mode) {
+  const int magic_addr = (mode == MODE_SCREEN_VERTICAL)
+    ? EEPROM_ADDR_ZERO_VERT_MAGIC
+    : EEPROM_ADDR_ZERO_UP_MAGIC;
+  const int zero_addr = (mode == MODE_SCREEN_VERTICAL)
+    ? EEPROM_ADDR_ZERO_VERT
+    : EEPROM_ADDR_ZERO_UP;
+
+  EEPROM.put(zero_addr + 0, roll_zero);
+  EEPROM.put(zero_addr + 4, pitch_zero);
+  EEPROM.put(magic_addr, EEPROM_ZERO_MAGIC);
+  EEPROM.commit();
+}
+
 void initializeAngles() {
   QMI8658_Data d;
   imu.readSensorData(d);
@@ -543,6 +683,125 @@ void initializeAngles() {
 void setZeroReference() {
   roll_zero  = roll_phys  + align_roll;
   pitch_zero = pitch_phys + align_pitch;
+  saveZeroReferenceToEeprom(orientationMode);
+}
+
+void zeroWorkflowStart(void) {
+  if (alignmentIsActive()) {
+    Serial.println("Zero blocked: ALIGN active");
+    return;
+  }
+  modeWorkflowCancel();
+  recalibrationWorkflowCancel();
+  zeroPending = true;
+  zeroConfirmed = false;
+  zeroSampling = false;
+  zeroSampleCount = 0;
+  zeroSumRoll = 0.0f;
+  zeroSumPitch = 0.0f;
+
+  Serial.println();
+  Serial.println("Zero workflow");
+  Serial.println("Press CONFIRM and hold still");
+  Serial.println("Send 'c' to CONFIRM, 'x' to cancel");
+  Serial.println("Tip: ACTION short=CONFIRM, long=CANCEL");
+}
+
+void zeroWorkflowConfirm(void) {
+  if (!zeroPending || zeroConfirmed) return;
+  zeroConfirmed = true;
+  zeroSampling = false;
+  zeroSampleCount = 0;
+  zeroStartMs = millis();
+  zeroRefRoll = roll_phys + align_roll;
+  zeroRefPitch = pitch_phys + align_pitch;
+  Serial.println("Zero confirmed. Hold still...");
+}
+
+void zeroWorkflowCancel(void) {
+  if (!zeroPending) return;
+  zeroPending = false;
+  zeroConfirmed = false;
+  zeroSampling = false;
+  zeroSampleCount = 0;
+  Serial.println("Zero canceled");
+}
+
+void processZeroWorkflow() {
+  if (!zeroPending || !zeroConfirmed) return;
+
+  const unsigned long now = millis();
+  const float curRoll = roll_phys + align_roll;
+  const float curPitch = pitch_phys + align_pitch;
+
+  if (!zeroSampling) {
+    const float dr = fabsf(curRoll - zeroRefRoll);
+    const float dp = fabsf(curPitch - zeroRefPitch);
+    if (dr > zeroMotionThreshDeg || dp > zeroMotionThreshDeg) {
+      zeroStartMs = now;
+      zeroRefRoll = curRoll;
+      zeroRefPitch = curPitch;
+      return;
+    }
+    if ((now - zeroStartMs) >= zeroStillMs) {
+      zeroSampling = true;
+      zeroSampleCount = 0;
+      zeroSumRoll = 0.0f;
+      zeroSumPitch = 0.0f;
+      Serial.println("Zero sampling...");
+    }
+    return;
+  }
+
+  zeroSumRoll += curRoll;
+  zeroSumPitch += curPitch;
+  zeroSampleCount++;
+
+  if (zeroSampleCount < zeroSampleTarget) return;
+
+  roll_zero = zeroSumRoll / (float)zeroSampleTarget;
+  pitch_zero = zeroSumPitch / (float)zeroSampleTarget;
+  saveZeroReferenceToEeprom(orientationMode);
+
+  zeroPending = false;
+  zeroConfirmed = false;
+  zeroSampling = false;
+  zeroSampleCount = 0;
+  Serial.println("Zero complete");
+}
+
+bool zeroWorkflowIsActive(void) {
+  return zeroPending;
+}
+
+bool zeroWorkflowIsConfirmed(void) {
+  return zeroConfirmed;
+}
+
+float zeroWorkflowRemainingSeconds(void) {
+  if (!zeroPending || !zeroConfirmed) return 0.0f;
+  if (!zeroSampling) {
+    const unsigned long now = millis();
+    const unsigned long elapsed = now - zeroStartMs;
+    if (elapsed >= zeroStillMs) return ((float)zeroSampleTarget * 0.02f);
+    return ((float)(zeroStillMs - elapsed) / 1000.0f) + ((float)zeroSampleTarget * 0.02f);
+  }
+  const int rem = zeroSampleTarget - zeroSampleCount;
+  if (rem <= 0) return 0.0f;
+  return (float)rem * 0.02f;
+}
+
+float zeroWorkflowProgressPercent(void) {
+  if (!zeroPending || !zeroConfirmed) return 0.0f;
+  if (!zeroSampling) {
+    const unsigned long now = millis();
+    const unsigned long elapsed = now - zeroStartMs;
+    if (elapsed >= zeroStillMs) return 40.0f;
+    return 40.0f * ((float)elapsed / (float)zeroStillMs);
+  }
+  float frac = (float)zeroSampleCount / (float)zeroSampleTarget;
+  if (frac > 1.0f) frac = 1.0f;
+  return 40.0f + 60.0f * frac;
 }
 
 void setOrientation(OrientationMode m) {
@@ -552,12 +811,20 @@ void setOrientation(OrientationMode m) {
 
   printMode();
 
-  calibrateOffsets();
+  if (!loadBiasOffsetsFromEeprom(orientationMode)) {
+    calibrateOffsets();
+    saveBiasOffsetsToEeprom(orientationMode);
+  }
+  if (!loadZeroReferenceFromEeprom(orientationMode)) {
+    roll_zero = 0.0f;
+    pitch_zero = 0.0f;
+  }
   initializeAngles();
 }
 
 void runQuickRecalibration(void) {
   calibrateOffsets();
+  saveBiasOffsetsToEeprom(orientationMode);
   initializeAngles();
   Serial.println("Quick recalibration complete");
 }
@@ -672,6 +939,7 @@ void alignmentGetInstruction(char *buf, unsigned int buf_size) {
 
 void alignmentStart(void) {
   modeWorkflowCancel();
+  zeroWorkflowCancel();
   recalibrationWorkflowCancel();
   if (alignState.active) {
     printAlignmentInstruction();
@@ -706,17 +974,13 @@ void alignmentCancel(void) {
 }
 
 void modeWorkflowStart(OrientationMode target) {
+  zeroWorkflowCancel();
   recalibrationWorkflowCancel();
-  modePending = true;
+  modePending = false;
   modeConfirmed = false;
   modeTargetState = target;
-
-  Serial.println();
-  Serial.println("Mode workflow");
-  Serial.print("Reposition with ");
-  Serial.println(target == MODE_SCREEN_VERTICAL ? "SCREEN VERTICAL" : "SCREEN UP");
-  Serial.println("Send 'c' to CONFIRM and hold still");
-  Serial.println("Send 'x' to cancel");
+  setOrientation(target);
+  Serial.println("Mode change complete");
 }
 
 void modeWorkflowStartToggle(void) {
@@ -726,14 +990,9 @@ void modeWorkflowStartToggle(void) {
 }
 
 void modeWorkflowConfirm() {
-  if (!modePending) return;
-  if (modeConfirmed) return;
-
-  modeConfirmed = true;
-  modeStartMs = millis();
-  modeRefRoll = roll_phys;
-  modeRefPitch = pitch_phys;
-  Serial.println("Mode confirmed. Hold still...");
+  // MODE is immediate in current UX; confirm kept as a no-op for compatibility.
+  (void)modePending;
+  (void)modeConfirmed;
 }
 
 void modeWorkflowCancel() {
@@ -744,24 +1003,7 @@ void modeWorkflowCancel() {
 }
 
 void processModeWorkflow() {
-  if (!modePending || !modeConfirmed) return;
-
-  const unsigned long now = millis();
-  const float dr = fabsf(roll_phys - modeRefRoll);
-  const float dp = fabsf(pitch_phys - modeRefPitch);
-  if (dr > modeMotionThreshDeg || dp > modeMotionThreshDeg) {
-    modeStartMs = now;
-    modeRefRoll = roll_phys;
-    modeRefPitch = pitch_phys;
-    return;
-  }
-
-  if ((now - modeStartMs) >= modeStillMs) {
-    modePending = false;
-    modeConfirmed = false;
-    setOrientation(modeTargetState);
-    Serial.println("Mode change complete");
-  }
+  // MODE is immediate; no async workflow processing required.
 }
 
 bool modeWorkflowIsActive(void) {
@@ -777,23 +1019,16 @@ OrientationMode modeWorkflowTarget(void) {
 }
 
 float modeWorkflowRemainingSeconds(void) {
-  if (!modePending || !modeConfirmed) return 0.0f;
-  const unsigned long now = millis();
-  const unsigned long elapsed = now - modeStartMs;
-  if (elapsed >= modeStillMs) return 0.0f;
-  return (float)(modeStillMs - elapsed) / 1000.0f;
+  return 0.0f;
 }
 
 float modeWorkflowProgressPercent(void) {
-  if (!modePending || !modeConfirmed) return 0.0f;
-  const unsigned long now = millis();
-  const unsigned long elapsed = now - modeStartMs;
-  if (elapsed >= modeStillMs) return 100.0f;
-  return ((float)elapsed * 100.0f) / (float)modeStillMs;
+  return 0.0f;
 }
 
 void recalibrationWorkflowStart(void) {
   modeWorkflowCancel();
+  zeroWorkflowCancel();
   recalPending = true;
   recalConfirmed = false;
   recalSampling = false;
@@ -866,6 +1101,7 @@ void processRecalibrationWorkflow() {
   az_off = (recalSumAz / (float)recalSampleTarget) - g_ref;
   gx_off = recalSumGx / (float)recalSampleTarget;
   gy_off = recalSumGy / (float)recalSampleTarget;
+  saveBiasOffsetsToEeprom(orientationMode);
   initializeAngles();
 
   recalPending = false;
@@ -983,6 +1219,39 @@ void printMode() {
   delay(1000);
 }
 
+void printRawImuSample(const QMI8658_Data &d, float ax, float ay, float az, float gx, float gy) {
+  // d.* are sensor values after library scaling, before project remap/offset removal.
+  // ax..gy args here are remapped + offset-corrected values used by the filter.
+  float rax, ray, raz, rgx, rgy;
+  remapAccel(d, rax, ray, raz);
+  remapGyro(d, rgx, rgy);
+
+  Serial.print("RAW ");
+  Serial.print(orientationMode == MODE_SCREEN_VERTICAL ? "VERT" : "UP");
+  Serial.print(" | sens a=(");
+  Serial.print(d.accelX, 3); Serial.print(",");
+  Serial.print(d.accelY, 3); Serial.print(",");
+  Serial.print(d.accelZ, 3); Serial.print(") g=(");
+  Serial.print(d.gyroX, 3); Serial.print(",");
+  Serial.print(d.gyroY, 3); Serial.print(",");
+  Serial.print(d.gyroZ, 3); Serial.print(")");
+  Serial.print(" | map a=(");
+  Serial.print(rax, 3); Serial.print(",");
+  Serial.print(ray, 3); Serial.print(",");
+  Serial.print(raz, 3); Serial.print(") g=(");
+  Serial.print(rgx, 3); Serial.print(",");
+  Serial.print(rgy, 3); Serial.print(")");
+  Serial.print(" | corr a=(");
+  Serial.print(ax, 3); Serial.print(",");
+  Serial.print(ay, 3); Serial.print(",");
+  Serial.print(az, 3); Serial.print(") g=(");
+  Serial.print(gx, 3); Serial.print(",");
+  Serial.print(gy, 3); Serial.print(")");
+  Serial.print(" | angle=(");
+  Serial.print(roll_phys, 2); Serial.print(",");
+  Serial.print(pitch_phys, 2); Serial.println(")");
+}
+
 void handleBootButton() {
   const bool rawPressed = (digitalRead(BOOT_BUTTON_PIN) == LOW);
   const unsigned long now = millis();
@@ -1016,8 +1285,22 @@ void handleBootButton() {
         } else {
           modeWorkflowConfirm();
         }
+      } else if (zeroWorkflowIsActive()) {
+        if (pressMs >= bootBtnLongPressMs) {
+          zeroWorkflowCancel();
+        } else {
+          zeroWorkflowConfirm();
+        }
+      } else if (recalibrationWorkflowIsActive()) {
+        if (pressMs >= bootBtnLongPressMs) {
+          recalibrationWorkflowCancel();
+        } else {
+          recalibrationWorkflowConfirm();
+        }
       } else {
-        if (pressMs >= bootBtnVeryLongPressMs) {
+        if (pressMs >= bootBtnUltraLongPressMs) {
+          recalibrationWorkflowStart();
+        } else if (pressMs >= bootBtnVeryLongPressMs) {
           modeWorkflowStartToggle();
         } else if (pressMs >= bootBtnLongPressMs) {
           cycleAxisMode();

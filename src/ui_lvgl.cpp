@@ -92,6 +92,7 @@ typedef enum {
   UI_STATE_NORMAL,
   UI_STATE_ALIGN,
   UI_STATE_MODE,
+  UI_STATE_ZERO,
   UI_STATE_RECAL
 } ui_state_t;
 
@@ -144,6 +145,7 @@ static lv_obj_t *label_btn_align;
 static lv_obj_t *label_btn_rotate;
 static uint32_t zero_feedback_until_ms = 0;
 static uint32_t zero_feedback_start_ms = 0;
+static bool zero_long_press_handled = false;
 
 static const char *axis_mode_text()
 {
@@ -256,10 +258,51 @@ static void update_boot_hint_label()
         progress_pct = 100;
       }
     }
+  } else if (zeroWorkflowIsActive()) {
+    if (!zeroWorkflowIsConfirmed()) {
+      if (bootHoldIsActive()) {
+        const unsigned long hold_ms = bootHoldDurationMs();
+        if (hold_ms < 1200) {
+          const float to_cancel = countdown_display_seconds((1200 - hold_ms) / 1000.0f);
+          snprintf(buf, sizeof(buf),
+                   "ACTION: release = CONFIRM | CANCEL in %.1f s",
+                   to_cancel);
+          progress_pct = (int)((hold_ms * 100UL) / 1200UL);
+        } else {
+          snprintf(buf, sizeof(buf), "ACTION: release = CANCEL");
+          progress_pct = 100;
+        }
+      } else {
+        snprintf(buf, sizeof(buf), "Zero: press CONFIRM and hold still");
+      }
+    } else {
+      const float rem = zeroWorkflowRemainingSeconds();
+      if (rem > 0.10f) {
+        const float rem_show = countdown_display_seconds(rem);
+        snprintf(buf, sizeof(buf), "Zeroing %.1f s", rem_show);
+      } else {
+        snprintf(buf, sizeof(buf), "Applying...");
+      }
+      progress_pct = (int)zeroWorkflowProgressPercent();
+    }
   } else if (recalibrationWorkflowIsActive()) {
     if (!recalibrationWorkflowIsConfirmed()) {
-      const char *target_text = orientation_instruction_text_for(orientationMode);
-      snprintf(buf, sizeof(buf), "Reposition with %s", target_text);
+      if (bootHoldIsActive()) {
+        const unsigned long hold_ms = bootHoldDurationMs();
+        if (hold_ms < 1200) {
+          const float to_cancel = countdown_display_seconds((1200 - hold_ms) / 1000.0f);
+          snprintf(buf, sizeof(buf),
+                   "ACTION: release = CONFIRM | CANCEL in %.1f s",
+                   to_cancel);
+          progress_pct = (int)((hold_ms * 100UL) / 1200UL);
+        } else {
+          snprintf(buf, sizeof(buf), "ACTION: release = CANCEL");
+          progress_pct = 100;
+        }
+      } else {
+        const char *target_text = orientation_instruction_text_for(orientationMode);
+        snprintf(buf, sizeof(buf), "Reposition with %s", target_text);
+      }
     } else {
       const float rem = recalibrationWorkflowRemainingSeconds();
       if (rem > 0.10f) {
@@ -289,24 +332,31 @@ static void update_boot_hint_label()
   if (ui_state == UI_STATE_NORMAL &&
       now_ms >= zero_feedback_until_ms &&
       !modeWorkflowIsActive() &&
+      !zeroWorkflowIsActive() &&
       !alignmentIsActive() &&
       !recalibrationWorkflowIsActive()) {
     const unsigned long hold_ms = bootHoldDurationMs();
     const float to_axis = (hold_ms < 1200) ? countdown_display_seconds((1200 - hold_ms) / 1000.0f) : 0.0f;
     const float to_mode = (hold_ms < 2200) ? countdown_display_seconds((2200 - hold_ms) / 1000.0f) : 0.0f;
+    const float to_recal = (hold_ms < 3200) ? countdown_display_seconds((3200 - hold_ms) / 1000.0f) : 0.0f;
 
     if (hold_ms < 1200) {
       snprintf(buf, sizeof(buf),
                "Release: FREEZE | AXIS in %.1f s",
                to_axis);
-      progress_pct = (int)((hold_ms * 100UL) / 2200UL);
+      progress_pct = (int)((hold_ms * 100UL) / 3200UL);
     } else if (hold_ms < 2200) {
       snprintf(buf, sizeof(buf),
                "Release: AXIS | MODE in %.1f s",
                to_mode);
-      progress_pct = (int)((hold_ms * 100UL) / 2200UL);
+      progress_pct = (int)((hold_ms * 100UL) / 3200UL);
+    } else if (hold_ms < 3200) {
+      snprintf(buf, sizeof(buf),
+               "Release: MODE | RECAL in %.1f s",
+               to_recal);
+      progress_pct = (int)((hold_ms * 100UL) / 3200UL);
     } else {
-      snprintf(buf, sizeof(buf), "Release: MODE");
+      snprintf(buf, sizeof(buf), "Release: RECAL");
       progress_pct = 100;
     }
   }
@@ -464,6 +514,23 @@ static void apply_ui_state()
       apply_axis_layout();
       break;
 
+    case UI_STATE_ZERO:
+      lv_obj_clear_flag(label_mode, LV_OBJ_FLAG_HIDDEN);
+      lv_obj_add_flag(label_header, LV_OBJ_FLAG_HIDDEN);
+      lv_obj_add_flag(instr_grp, LV_OBJ_FLAG_HIDDEN);
+
+      lv_label_set_text(label_btn_zero, "CANCEL");
+      lv_label_set_text(label_btn_mode, "CONFIRM");
+      lv_label_set_text(label_btn_align, "ALIGN");
+
+      lv_obj_add_state(btn_axis,   LV_STATE_DISABLED);
+      lv_obj_add_state(btn_align,  LV_STATE_DISABLED);
+      lv_obj_add_state(btn_rotate, LV_STATE_DISABLED);
+      lv_obj_clear_state(btn_mode, LV_STATE_DISABLED);
+
+      apply_axis_layout();
+      break;
+
     case UI_STATE_RECAL:
       lv_obj_clear_flag(label_mode, LV_OBJ_FLAG_HIDDEN);
       lv_obj_add_flag(label_header, LV_OBJ_FLAG_HIDDEN);
@@ -518,8 +585,18 @@ void cycleAxisMode(void)
 
 static void on_zero_pressed(lv_event_t *)
 {
+  if (zero_long_press_handled) {
+    zero_long_press_handled = false;
+    return;
+  }
+
   if (ui_state == UI_STATE_MODE) {
     modeWorkflowCancel();
+    ui_set_state(UI_STATE_NORMAL);
+    return;
+  }
+  if (ui_state == UI_STATE_ZERO) {
+    zeroWorkflowCancel();
     ui_set_state(UI_STATE_NORMAL);
     return;
   }
@@ -530,9 +607,8 @@ static void on_zero_pressed(lv_event_t *)
   }
 
   if (ui_state == UI_STATE_NORMAL) {
-    setZeroReference();
-    zero_feedback_start_ms = millis();
-    zero_feedback_until_ms = millis() + 1400;
+    zeroWorkflowStart();
+    ui_set_state(UI_STATE_ZERO);
   }
   else {
     alignmentCancel();
@@ -540,10 +616,20 @@ static void on_zero_pressed(lv_event_t *)
   }
 }
 
+static void on_zero_long_pressed(lv_event_t *)
+{
+  if (ui_state != UI_STATE_NORMAL) return;
+  zero_long_press_handled = true;
+  modeWorkflowCancel();
+  recalibrationWorkflowStart();
+  ui_set_state(UI_STATE_RECAL);
+}
+
 static void on_axis_pressed(lv_event_t *)
 {
   if (ui_state != UI_STATE_NORMAL) return;
   modeWorkflowCancel();
+  zeroWorkflowCancel();
   recalibrationWorkflowCancel();
   cycleAxisMode();
 }
@@ -552,7 +638,7 @@ static void on_mode_pressed(lv_event_t *)
 {
   if (ui_state == UI_STATE_NORMAL) {
     modeWorkflowStartToggle();
-    ui_set_state(UI_STATE_MODE);
+    ui_set_state(UI_STATE_NORMAL);
     return;
   }
 
@@ -563,18 +649,21 @@ static void on_mode_pressed(lv_event_t *)
     return;
   }
 
-  if (ui_state != UI_STATE_MODE) return;
-
-  if (!modeWorkflowIsConfirmed()) {
-    modeWorkflowConfirm();
+  if (ui_state == UI_STATE_ZERO) {
+    if (!zeroWorkflowIsConfirmed()) {
+      zeroWorkflowConfirm();
+    }
     return;
   }
+
+  if (ui_state != UI_STATE_MODE) return;
 }
 
 static void on_readout_pressed(lv_event_t *)
 {
   if (ui_state != UI_STATE_NORMAL) return;
   modeWorkflowCancel();
+  zeroWorkflowCancel();
   recalibrationWorkflowCancel();
   toggleMeasurementFreeze();
 }
@@ -583,6 +672,7 @@ static void on_align_pressed(lv_event_t *)
 {
   if (ui_state == UI_STATE_NORMAL) {
     modeWorkflowCancel();
+    zeroWorkflowCancel();
     recalibrationWorkflowCancel();
     alignmentStart();
     if (alignmentIsActive()) ui_set_state(UI_STATE_ALIGN);
@@ -600,6 +690,7 @@ static void on_rotate_pressed(lv_event_t *)
 {
   if (ui_state == UI_STATE_NORMAL) {
     modeWorkflowCancel();
+    zeroWorkflowCancel();
     recalibrationWorkflowCancel();
     toggleRotation();
   }
@@ -880,6 +971,7 @@ static void create_ui()
   lv_obj_center(label_btn_rotate);
 
   lv_obj_add_event_cb(btn_zero,   on_zero_pressed,   LV_EVENT_CLICKED, NULL);
+  lv_obj_add_event_cb(btn_zero,   on_zero_long_pressed, LV_EVENT_LONG_PRESSED, NULL);
   lv_obj_add_event_cb(btn_axis,   on_axis_pressed,   LV_EVENT_CLICKED, NULL);
   lv_obj_add_event_cb(btn_mode,   on_mode_pressed,   LV_EVENT_CLICKED, NULL);
   lv_obj_add_event_cb(btn_align,  on_align_pressed,  LV_EVENT_CLICKED, NULL);
@@ -909,6 +1001,7 @@ static void update_ui()
 
   if (!align_active) {
     const bool mode_active = modeWorkflowIsActive();
+    const bool zero_active = zeroWorkflowIsActive();
     const bool recal_active = recalibrationWorkflowIsActive();
     if (mode_active && ui_state != UI_STATE_MODE) {
       ui_set_state(UI_STATE_MODE);
@@ -916,6 +1009,13 @@ static void update_ui()
       ui_set_state(UI_STATE_NORMAL);
     }
     if (!mode_active) {
+      if (zero_active && ui_state != UI_STATE_ZERO) {
+        ui_set_state(UI_STATE_ZERO);
+      } else if (!zero_active && ui_state == UI_STATE_ZERO) {
+        ui_set_state(UI_STATE_NORMAL);
+      }
+    }
+    if (!mode_active && !zero_active) {
       if (recal_active && ui_state != UI_STATE_RECAL) {
         ui_set_state(UI_STATE_RECAL);
       } else if (!recal_active && ui_state == UI_STATE_RECAL) {

@@ -27,7 +27,12 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
     .muted { color: #9fb3d9; margin-bottom: 12px; }
     .card { background: #141c34; border-radius: 10px; padding: 14px; margin-bottom: 12px; }
     .row { display: flex; gap: 10px; flex-wrap: wrap; }
-    .value { font-size: 36px; font-weight: bold; margin-top: 4px; }
+    .metric-card { flex: 1; min-width: 130px; text-align: center; }
+    #metricsRow.single-axis { justify-content: center; }
+    #metricsRow.single-axis > .metric-card { flex: 0 1 300px; max-width: 300px; }
+    .value { font-size: 36px; font-weight: bold; margin-top: 4px; transition: color .12s linear; }
+    .value.warn { color: #FFBF00; }
+    .value.crit { color: #DC143C; }
     button {
       border: 0; border-radius: 8px; padding: 12px 14px; min-width: 90px;
       background: #2a7fff; color: white; font-weight: 700; cursor: pointer;
@@ -45,12 +50,12 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
   <div class="muted">FW <span id="fw"></span></div>
 
   <div class="card">
-    <div class="row">
-      <div id="rollCard" style="flex:1;min-width:130px;">
+    <div id="metricsRow" class="row">
+      <div id="rollCard" class="metric-card">
         <div>ROLL</div>
         <div id="roll" class="value">--</div>
       </div>
-      <div id="pitchCard" style="flex:1;min-width:130px;">
+      <div id="pitchCard" class="metric-card">
         <div>PITCH</div>
         <div id="pitch" class="value">--</div>
       </div>
@@ -94,17 +99,53 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
     const pitchEl = document.getElementById('pitch');
     const rollCard = document.getElementById('rollCard');
     const pitchCard = document.getElementById('pitchCard');
+    const metricsRow = document.getElementById('metricsRow');
     const normalControls = document.getElementById('normalControls');
     const modeControls = document.getElementById('modeControls');
     const alignControls = document.getElementById('alignControls');
     const recalControls = document.getElementById('recalControls');
     const progressWrap = document.getElementById('progressWrap');
     const progressBar = document.getElementById('progressBar');
+    const WARN_LIMIT = 30.0;
+    const CRIT_LIMIT = 45.0;
 
     function fmt(v) {
       const n = Number(v);
       if (Number.isNaN(n)) return '--';
       return (n >= 0 ? '+' : '') + n.toFixed(2) + '\u00B0';
+    }
+
+    function setAngleClass(el, v) {
+      el.classList.remove('warn', 'crit');
+      const n = Number(v);
+      if (Number.isNaN(n)) return;
+      const a = Math.abs(n);
+      if (a >= CRIT_LIMIT) el.classList.add('crit');
+      else if (a >= WARN_LIMIT) el.classList.add('warn');
+    }
+
+    function setAxisLayout(axis) {
+      const isRoll = axis === 'ROLL';
+      const isPitch = axis === 'PITCH';
+      if (isRoll || isPitch) {
+        metricsRow.classList.add('single-axis');
+        metricsRow.style.justifyContent = 'center';
+        const active = isRoll ? rollCard : pitchCard;
+        const inactive = isRoll ? pitchCard : rollCard;
+        active.classList.remove('hidden');
+        inactive.classList.add('hidden');
+        active.style.flex = '0 1 320px';
+        active.style.maxWidth = '320px';
+      } else {
+        metricsRow.classList.remove('single-axis');
+        metricsRow.style.justifyContent = '';
+        rollCard.classList.remove('hidden');
+        pitchCard.classList.remove('hidden');
+        rollCard.style.flex = '';
+        pitchCard.style.flex = '';
+        rollCard.style.maxWidth = '';
+        pitchCard.style.maxWidth = '';
+      }
     }
 
     async function refreshState() {
@@ -113,23 +154,20 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
         const s = await r.json();
         rollEl.textContent = fmt(s.roll);
         pitchEl.textContent = fmt(s.pitch);
+        setAngleClass(rollEl, s.roll);
+        setAngleClass(pitchEl, s.pitch);
         fwEl.textContent = s.fw;
         statusEl.textContent =
           `${s.orientation} | ${s.axis} | ROT ${s.rotation} | ${s.live}`;
-        if (s.axis === 'ROLL' || s.axis_id === 1) {
-          rollCard.classList.remove('hidden');
-          pitchCard.classList.add('hidden');
-        } else if (s.axis === 'PITCH' || s.axis_id === 2) {
-          rollCard.classList.add('hidden');
-          pitchCard.classList.remove('hidden');
-        } else {
-          rollCard.classList.remove('hidden');
-          pitchCard.classList.remove('hidden');
-        }
-        normalControls.classList.toggle('hidden', s.mode_active || s.align_active || s.recal_active);
-        modeControls.classList.toggle('hidden', !s.mode_active || s.align_active || s.recal_active);
-        alignControls.classList.toggle('hidden', !s.align_active || s.recal_active);
-        recalControls.classList.toggle('hidden', !s.recal_active);
+        const axisText = String(s.axis || '').toUpperCase();
+        const axis = (axisText === 'ROLL' || s.axis_id === 1) ? 'ROLL'
+                   : (axisText === 'PITCH' || s.axis_id === 2) ? 'PITCH'
+                   : 'BOTH';
+        setAxisLayout(axis);
+        normalControls.classList.toggle('hidden', s.mode_active || s.align_active || s.recal_active || s.zero_active);
+        modeControls.classList.toggle('hidden', !s.mode_active || s.align_active || s.recal_active || s.zero_active);
+        alignControls.classList.toggle('hidden', !s.align_active || s.recal_active || s.zero_active);
+        recalControls.classList.toggle('hidden', !(s.recal_active || s.zero_active));
         progressWrap.classList.add('hidden');
         progressBar.style.width = '0%';
         if (s.align_active) {
@@ -145,6 +183,14 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
             progressBar.style.width = `${Math.max(0, Math.min(100, s.mode_progress_pct || 0))}%`;
           } else {
             msgEl.textContent = `MODE target: ${s.mode_target}`;
+          }
+        } else if (s.zero_active) {
+          if (s.zero_confirmed) {
+            msgEl.textContent = `ZERO: hold still ${s.zero_rem_s.toFixed(1)} s`;
+            progressWrap.classList.remove('hidden');
+            progressBar.style.width = `${Math.max(0, Math.min(100, s.zero_progress_pct || 0))}%`;
+          } else {
+            msgEl.textContent = 'ZERO: press CONFIRM and hold still';
           }
         } else if (s.recal_active) {
           if (s.recal_confirmed) {
@@ -242,6 +288,10 @@ void handle_state() {
   const char *mode_target = orientation_text_for(modeWorkflowTarget());
   const float mode_rem_s = modeWorkflowRemainingSeconds();
   const float mode_progress_pct = modeWorkflowProgressPercent();
+  const bool zero_active = zeroWorkflowIsActive();
+  const bool zero_confirmed = zeroWorkflowIsConfirmed();
+  const float zero_rem_s = zeroWorkflowRemainingSeconds();
+  const float zero_progress_pct = zeroWorkflowProgressPercent();
   const bool recal_active = recalibrationWorkflowIsActive();
   const bool recal_confirmed = recalibrationWorkflowIsConfirmed();
   const float recal_rem_s = recalibrationWorkflowRemainingSeconds();
@@ -275,6 +325,7 @@ void handle_state() {
     "\"align_active\":%s,\"align_instruction\":\"%s\","
     "\"align_capture_active\":%s,\"align_capture_pct\":%.1f,"
     "\"mode_active\":%s,\"mode_confirmed\":%s,\"mode_target\":\"%s\",\"mode_rem_s\":%.2f,\"mode_progress_pct\":%.1f,"
+    "\"zero_active\":%s,\"zero_confirmed\":%s,\"zero_rem_s\":%.2f,\"zero_progress_pct\":%.1f,"
     "\"recal_active\":%s,\"recal_confirmed\":%s,\"recal_target\":\"%s\",\"recal_rem_s\":%.2f,\"recal_progress_pct\":%.1f}",
     fw_esc,
     roll,
@@ -293,6 +344,10 @@ void handle_state() {
     mode_target_esc,
     mode_rem_s,
     mode_progress_pct,
+    zero_active ? "true" : "false",
+    zero_confirmed ? "true" : "false",
+    zero_rem_s,
+    zero_progress_pct,
     recal_active ? "true" : "false",
     recal_confirmed ? "true" : "false",
     recal_target_esc,
@@ -309,6 +364,7 @@ void handle_state() {
       "\"rotation\":%d,\"live\":\"%s\",\"align_active\":%s,"
       "\"align_instruction\":\"\",\"align_capture_active\":false,\"align_capture_pct\":0.0,"
       "\"mode_active\":%s,\"mode_confirmed\":false,\"mode_target\":\"%s\",\"mode_rem_s\":0.0,\"mode_progress_pct\":0.0,"
+      "\"zero_active\":%s,\"zero_confirmed\":false,\"zero_rem_s\":0.0,\"zero_progress_pct\":0.0,"
       "\"recal_active\":%s,\"recal_confirmed\":false,\"recal_target\":\"%s\",\"recal_rem_s\":0.0,\"recal_progress_pct\":0.0}",
       fw_esc,
       roll,
@@ -321,6 +377,7 @@ void handle_state() {
       alignmentIsActive() ? "true" : "false",
       mode_active ? "true" : "false",
       mode_target_esc,
+      zero_active ? "true" : "false",
       recal_active ? "true" : "false",
       recal_target_esc
     );
@@ -362,7 +419,7 @@ String read_cmd_from_request() {
 void handle_cmd() {
   const String cmd = read_cmd_from_request();
   if (cmd == "zero") {
-    setZeroReference();
+    zeroWorkflowStart();
   } else if (cmd == "axis") {
     cycleAxisMode();
   } else if (cmd == "freeze") {
@@ -389,15 +446,20 @@ void handle_cmd() {
   } else if (cmd == "confirm") {
     if (modeWorkflowIsActive()) {
       modeWorkflowConfirm();
+    } else if (zeroWorkflowIsActive()) {
+      zeroWorkflowConfirm();
     } else if (recalibrationWorkflowIsActive()) {
       recalibrationWorkflowConfirm();
     } else {
-      send_json("{\"ok\":false,\"error\":\"confirm requires MODE/RECAL workflow\"}", 409);
+      send_json("{\"ok\":false,\"error\":\"confirm requires active workflow\"}", 409);
       return;
     }
   } else if (cmd == "cancel") {
     if (modeWorkflowIsActive()) {
       modeWorkflowCancel();
+    }
+    if (zeroWorkflowIsActive()) {
+      zeroWorkflowCancel();
     }
     if (recalibrationWorkflowIsActive()) {
       recalibrationWorkflowCancel();
@@ -423,6 +485,9 @@ void handle_options() {
 }
 
 void handle_root() {
+  server.sendHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+  server.sendHeader("Pragma", "no-cache");
+  server.sendHeader("Expires", "0");
   server.send(200, "text/html", PAGE_HTML);
 }
 

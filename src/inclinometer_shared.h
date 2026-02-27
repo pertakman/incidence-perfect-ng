@@ -27,6 +27,13 @@ AxisDisplayMode getAxisMode(void);
 void setOrientation(OrientationMode m);
 
 void setZeroReference(void);
+void zeroWorkflowStart(void);
+void zeroWorkflowConfirm(void);
+void zeroWorkflowCancel(void);
+bool zeroWorkflowIsActive(void);
+bool zeroWorkflowIsConfirmed(void);
+float zeroWorkflowRemainingSeconds(void);
+float zeroWorkflowProgressPercent(void);
 void cycleMode(void);
 void cycleAxisMode(void);
 void toggleRotation(void);

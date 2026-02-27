@@ -1,4 +1,4 @@
-Incidence Perfect NG is a compact 2-axis inclinometer/incidence meter built around an ESP32-S3 + AMOLED touchscreen. It measures **roll** and **pitch** and provides guided workflows for **ZERO**, **MODE**, **ROTATE**, and **ALIGN**.
+Incidence Perfect NG is a compact 2-axis inclinometer/incidence meter built around an ESP32-S3 + AMOLED touchscreen. It measures **roll** and **pitch** and provides workflows for **ZERO**, **RECAL**, **MODE**, **ROTATE**, and **ALIGN**.
 
 > Beta note: This manual describes the current firmware behavior. If something differs on your device, report the **firmware version shown on the splash screen**.
 
@@ -29,14 +29,17 @@ Incidence Perfect NG is a compact 2-axis inclinometer/incidence meter built arou
 
 ## 2) Touch Controls (Everyday Use)
 
-### ZERO
+### ZERO / RECAL
 
 Use when the tool is resting in the reference position.
 
 - Tap `ZERO`.
-- A brief confirmation message appears (`Zero applied - hold still briefly`).
-- A short progress bar is shown while zero is being applied.
-- Values settle around `0.00`.
+- `ZERO` opens a guided workflow:
+  - `CONFIRM` to start stillness + averaging
+  - `CANCEL` to abort
+- During apply, a progress bar is shown.
+- On completion, values settle around `0.00`.
+- Long-press `ZERO` to start guided `RECAL` (confirm/cancel workflow).
 
 ### AXIS
 
@@ -71,14 +74,25 @@ In normal measurement mode:
 
 - **Short press**: toggle freeze (`LIVE` <-> `FROZEN`)
 - **Long press (~1.2s)**: cycle `AXIS` (`BOTH -> ROLL -> PITCH`)
-- **Very long press (~2.2s)**: enter/toggle `MODE` workflow (orientation change)
+- **Very long press (~2.2s)**: toggle `MODE` (`SCREEN UP` <-> `SCREEN VERTICAL`)
+- **Ultra long press (~3.2s)**: start guided `RECAL` workflow
 
 While holding the ACTION button, an on-screen hint shows what will happen on release and a progress indicator for the next threshold.
 Countdowns are shown as `X.X s` (with a space before `s`).
 
+In guided `RECAL` workflow:
+
+- **Short press**: `CONFIRM`
+- **Long press (~1.2s)**: `CANCEL`
+
+In guided `ZERO` workflow:
+
+- **Short press**: `CONFIRM`
+- **Long press (~1.2s)**: `CANCEL`
+
 ---
 
-## 4) MODE (Orientation Change, Guided)
+## 4) MODE (Orientation Change)
 
 `MODE` changes how the device interprets orientation.
 
@@ -87,19 +101,18 @@ Countdowns are shown as `X.X s` (with a space before `s`).
 
 ### Touch Workflow
 
-1. Tap `MODE` once to enter the guided workflow.
-2. The UI shows the required repositioning target:
-   - `Reposition with screen facing up`, or
-   - `Reposition with screen vertically`
-3. Tap `CONFIRM`, then **hold the device still**.
-4. A hold timer appears as `Hold still X.X s`, with a progress bar.
-5. Near completion, the UI switches to `Applying...` and then auto-applies the new mode.
-6. Tap `CANCEL` at any time to abort without changes.
+1. Tap `MODE`.
+2. Orientation switches immediately between `SCREEN UP` and `SCREEN VERTICAL`.
+3. Mode-specific stored calibration/zero references are loaded automatically.
 
-### ACTION Button in MODE Workflow
+### Serial / Web
 
-- Short press: `CONFIRM`
-- Long press: `CANCEL`
+- Serial:
+  - `m`: toggle mode
+  - `u`: set `SCREEN UP`
+  - `v`: set `SCREEN VERTICAL`
+- Web:
+  - `MODE` toggles immediately
 
 ---
 
@@ -131,15 +144,21 @@ If connected to a PC, you can control the same workflows via serial (115200).
 
 Core commands:
 
-- `z`: ZERO now
+- `z`: start guided ZERO workflow
 - `a`: AXIS cycle (`BOTH -> ROLL -> PITCH`)
 - `r`: ROTATE 180 toggle
 - `C`: start ALIGN workflow
-- `c`: confirm/capture (context-sensitive)
-- `m`: start MODE workflow to the opposite orientation
-- `u`: start MODE workflow targeting `SCREEN UP`
-- `v`: start MODE workflow targeting `SCREEN VERTICAL`
-- `x`: cancel pending MODE workflow
+- `k`: start guided RECAL workflow
+- `c`: context action
+  - in ALIGN: `CAPTURE`
+  - in ZERO pending: `CONFIRM`
+  - in RECAL pending: `CONFIRM`
+  - otherwise: start+confirm guided RECAL
+- `m`: toggle mode immediately
+- `u`: set `SCREEN UP` immediately
+- `v`: set `SCREEN VERTICAL` immediately
+- `x`: cancel pending ZERO / RECAL / ALIGN
+- `d`: toggle raw IMU debug stream (5 Hz)
 
 Serial and touch workflows are designed to stay synchronized.
 
@@ -159,8 +178,11 @@ Serial and touch workflows are designed to stay synchronized.
 
 ### MODE Doesn't Apply
 
-- Ensure you press `CONFIRM`, then keep the device still until `Applying...` appears and the mode change completes.
-- If you move, the countdown may reset (by design).
+- MODE is immediate in current firmware.
+- If orientation does not change, verify command source:
+  - touch `MODE`,
+  - serial `m/u/v`,
+  - ACTION very-long press.
 
 ---
 

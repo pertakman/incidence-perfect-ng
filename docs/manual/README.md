@@ -19,6 +19,9 @@ Output:
 Notes:
 
 - The pipeline uses local `pandoc` from `tools/` and headless Chrome/Edge for PDF rendering.
+- PowerShell is required to run the build scripts.
+- `scripts/ensure_pandoc.ps1` auto-downloads `pandoc` into `tools/pandoc/` if missing.
+- A local Chrome or Edge install is required for `--headless` PDF export.
 - Cover page is injected from `docs/manual/cover-template.html`.
 - Print styling is controlled by `docs/manual/manual.css`.
 - Splash cover image is embedded from generated `docs/manual/dist/cover.png`.
