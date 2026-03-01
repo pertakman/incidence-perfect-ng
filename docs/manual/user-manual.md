@@ -1,4 +1,4 @@
-Incidence Perfect NG is a compact 2-axis inclinometer/incidence meter built around an ESP32-S3 + AMOLED touchscreen. It measures **roll** and **pitch** and provides workflows for **ZERO**, **RECAL**, **MODE**, **ROTATE**, and **ALIGN**.
+﻿Incidence Perfect NG is a compact 2-axis inclinometer/incidence meter built around an ESP32-S3 + AMOLED touchscreen. It measures **roll** and **pitch** and provides workflows for **ZERO**, **OFFSET CAL**, **MODE**, **ROTATE**, and **ALIGN**.
 
 > Beta note: This manual describes the current firmware behavior. If something differs on your device, report the **firmware version shown on the splash screen**.
 
@@ -29,7 +29,7 @@ Incidence Perfect NG is a compact 2-axis inclinometer/incidence meter built arou
 
 ## 2) Touch Controls (Everyday Use)
 
-### ZERO / RECAL
+### ZERO / OFFSET CAL
 
 Use when the tool is resting in the reference position.
 
@@ -39,7 +39,7 @@ Use when the tool is resting in the reference position.
   - `CANCEL` to abort
 - During apply, a progress bar is shown.
 - On completion, values settle around `0.00`.
-- Long-press `ZERO` to start guided `RECAL` (confirm/cancel workflow).
+- Long-press `ZERO` to start guided `OFFSET CAL` (confirm/cancel workflow).
 
 ### AXIS
 
@@ -75,12 +75,12 @@ In normal measurement mode:
 - **Short press**: toggle freeze (`LIVE` <-> `FROZEN`)
 - **Long press (~1.2s)**: cycle `AXIS` (`BOTH -> ROLL -> PITCH`)
 - **Very long press (~2.2s)**: toggle `MODE` (`SCREEN UP` <-> `SCREEN VERTICAL`)
-- **Ultra long press (~3.2s)**: start guided `RECAL` workflow
+- **Ultra long press (~3.2s)**: start guided `OFFSET CAL` workflow
 
 While holding the ACTION button, an on-screen hint shows what will happen on release and a progress indicator for the next threshold.
 Countdowns are shown as `X.X s` (with a space before `s`).
 
-In guided `RECAL` workflow:
+In guided `OFFSET CAL` workflow:
 
 - **Short press**: `CONFIRM`
 - **Long press (~1.2s)**: `CANCEL`
@@ -133,10 +133,10 @@ This is a guided, 6-orientation capture procedure. The device will prompt you th
 
 Important:
 
-- ALIGN and RECAL are separate operations.
-- ALIGN does **not** run RECAL automatically.
-- Run guided `RECAL` separately in the active `MODE` when needed.
-- If you use both `SCREEN UP` and `SCREEN VERTICAL`, run `RECAL` in each mode so both mode-specific references are updated.
+- ALIGN and OFFSET CAL are separate operations.
+- ALIGN does **not** run OFFSET CAL automatically.
+- Run guided `OFFSET CAL` separately in the active `MODE` when needed.
+- If you use both `SCREEN UP` and `SCREEN VERTICAL`, run `OFFSET CAL` in each mode so both mode-specific references are updated.
 
 ### ACTION Button in ALIGN Workflow
 
@@ -156,23 +156,64 @@ Core commands:
 - `a`: AXIS cycle (`BOTH -> ROLL -> PITCH`)
 - `r`: ROTATE 180 toggle
 - `C`: start ALIGN workflow
-- `k`: start guided RECAL workflow
+- `o`: start guided OFFSET CAL workflow
 - `c`: context action
   - in ALIGN: `CAPTURE`
   - in ZERO pending: `CONFIRM`
-  - in RECAL pending: `CONFIRM`
-  - otherwise: start+confirm guided RECAL
+  - in OFFSET CAL pending: `CONFIRM`
+  - otherwise: start+confirm guided OFFSET CAL
+- `y`: explicit `CONFIRM` (ZERO/OFFSET CAL workflows)
+- `p`: explicit `CAPTURE` (ALIGN only)
 - `m`: toggle mode immediately
 - `u`: set `SCREEN UP` immediately
 - `v`: set `SCREEN VERTICAL` immediately
-- `x`: cancel pending ZERO / RECAL / ALIGN
+- `x` or `n`: cancel active workflows
 - `d`: toggle raw IMU debug stream (5 Hz)
+- `D`: print one raw IMU sample now
+- `s`: print runtime status snapshot
+- `h` or `?`: print serial help
+- After each serial command response, live scrolling output pauses so you can read feedback.
+  - Press `Enter`, `Space`, or send `g` to resume live stream.
 
 Serial and touch workflows are designed to stay synchronized.
 
 ---
 
-## 7) Troubleshooting
+## 7) Web Control (Phone Remote)
+
+Use your phone browser as a remote panel:
+
+1. Connect to the device AP:
+   - SSID: `IncidencePerfectNG-XXXX`
+   - Password: `incidence-ng`
+2. Open `http://192.168.4.1`.
+
+What you get in web UI:
+
+- Live `ROLL`/`PITCH` readout with the same status line as the device.
+- Normal controls: `ZERO`, `AXIS`, `FREEZE`, `ROTATE`, `OFFSET CAL`, `MODE`, `ALIGN`.
+- Context controls only when needed:
+  - `CONFIRM`/`CANCEL` during guided `ZERO` and `OFFSET CAL`
+  - `CAPTURE`/`CANCEL` during `ALIGN`
+- Progress bar during:
+  - ZERO hold/sampling
+  - OFFSET CAL hold/sampling
+  - ALIGN capture windows
+- Expandable diagnostics panel with grouped values:
+  - raw sensor vectors
+  - mapped vectors
+  - corrected vectors
+  - physics angles + conditioning
+  - calibration references (bias/zero/align)
+
+Important:
+
+- Web, touch, serial, and ACTION button all share the same workflows and states.
+- If one interface starts a workflow, the other interfaces should reflect it.
+
+---
+
+## 8) Troubleshooting
 
 ### Touch Feels Hard To Trigger
 
@@ -194,7 +235,57 @@ Serial and touch workflows are designed to stay synchronized.
 
 ---
 
-## 8) Beta Tester Checklist + Feedback
+## 9) Measurement Math (How It Works)
+
+This device estimates orientation from gravity measured by the accelerometer and short-term rate from the gyro.
+
+### Accelerometer Tilt Angles
+
+In the tool frame (`ax`, `ay`, `az`), the firmware computes:
+
+```text
+roll_acc  = atan2(ay, az)
+pitch_acc = atan2(-ax, sqrt(ay^2 + az^2))
+```
+
+Then values are converted to degrees.
+
+Why `pitch` uses `sqrt(ay^2 + az^2)`:
+
+- It uses the gravity component orthogonal to the pitch axis.
+- This reduces cross-coupling from roll.
+- It stays better conditioned as pitch approaches large angles.
+
+### Sensor Fusion
+
+The live angles are fused with a complementary filter:
+
+- Gyro integration gives smooth short-term motion response.
+- Accelerometer tilt gives long-term absolute reference to gravity.
+
+This combination is stable and responsive for field use.
+
+### Why Roll Becomes Weak Near +/-90 deg Pitch
+
+Near pitch `+/-90 deg`, gravity aligns mostly with one axis, so roll information in the other components becomes very small.
+At that geometry, roll is effectively underdetermined from gravity alone.
+
+Current firmware behavior:
+
+- Above about `|pitch| > 80 deg`, roll is intentionally attenuated to avoid unstable swings.
+
+### Practical Guidance For Large-Angle Work
+
+For tasks near vertical (for example checking a table-saw blade relative to the table):
+
+1. Use the orientation/mode that makes your primary measurement axis map to `PITCH`.
+2. Switch `AXIS` to `PITCH` for focus.
+3. Run `OFFSET CAL` and `ZERO` in the same physical setup/orientation you will measure in.
+4. Treat `ROLL` near `+/-90 deg` as secondary information.
+
+---
+
+## 10) Beta Tester Checklist + Feedback
 
 If you're testing externally, use:
 
@@ -230,5 +321,6 @@ This firmware and UI were developed by **Per Takman**, with assistance from **Op
 - The project source code is released under the MIT License.
 - The software is provided "AS IS", without warranty of any kind.
 - Third-party manuals, schematics, and library dependencies remain under their respective original licenses/terms.
+
 
 

@@ -1,39 +1,57 @@
-# Beta Tester Handoff Note
+﻿# Beta Tester Handoff Note (Rikard)
 
-## Build
+## Build Identity
 
-- Firmware: `FW_VERSION_PLACEHOLDER`
-- Board: ESP32-S3 AMOLED 1.91 inch (240x536)
-- Build date: `YYYY-MM-DD`
+- Firmware candidate: `2026.2.16`
+- Board: ESP32-S3 AMOLED 1.91 inch (`240x536`)
+- Prepared date: `2026-02-28`
+- Connectivity mode for this beta: Wi-Fi AP (`http://192.168.4.1`)
+
+## Objective For This Beta Session
+
+Collect real-world usability and reliability feedback across touch UI, ACTION button control, and phone web UI.
 
 ## What To Test
 
-1. Normal measurement flow (`ZERO`, `AXIS`, `MODE`, `ROTATE`).
-2. Guided `ALIGN` workflow end-to-end.
-3. ACTION button actions (short/long/very-long hold).
-4. Freeze behavior and responsiveness.
-5. Reboot/power-cycle persistence.
+1. Everyday flow: `ZERO`, `AXIS`, `MODE`, `ROTATE`, freeze/unfreeze.
+2. Guided workflows: `OFFSET CAL` and full 6-step `ALIGN`.
+3. ACTION button behavior:
+   - short, long, very long, and ultra long holds in normal mode
+   - `CONFIRM`/`CANCEL` behavior in guided workflows
+   - `CAPTURE` during ALIGN
+4. Phone web UI parity with device UI:
+   - controls appear only when relevant
+   - progress bars shown during hold/sampling phases
+   - diagnostics panel updates continuously without disconnect
+5. Reboot/power-cycle persistence for mode, rotation, align refs, and zero/offset-cal behavior.
 
-## Quick Controls
+## Quick Controls Reference
 
-- Touch buttons: `ZERO`, `AXIS`, `MODE`, `ALIGN`, `ROTATE`
+- Touch: `ZERO`, `AXIS`, `MODE`, `ALIGN`, `ROTATE`
 - ACTION button:
-  - normal: short = freeze, long = axis, very-long = mode
-  - align: press = capture
-  - mode guide: short = confirm, long = cancel
-- Serial:
-  - `z`, `a`, `m`, `u`, `v`, `C`, `c`, `r`, `x`
+  - normal: short = freeze, long = axis, very long = mode, ultra long = OFFSET CAL
+  - guided ZERO/OFFSET CAL: short = confirm, long = cancel
+  - ALIGN: short = capture
+- Serial (optional): `z`, `a`, `m`, `u`, `v`, `C`, `o`, `c`, `y`, `p`, `x`
 
-## Known Issues / Notes
+## Known Notes To Keep In Mind
 
-- Add current known limitations here before sending.
-- Example: "Serial monitor may need reconnect after board reset in VS Code."
+- Roll conditioning is intentionally reduced near high pitch angles (around `|pitch| > 80 deg`).
+- `ALIGN` and `OFFSET CAL` are separate workflows.
+- If both `SCREEN UP` and `SCREEN VERTICAL` are used in practice, run OFFSET CAL in both modes.
 
-## Feedback Requested
+## Feedback Format Requested
 
-Please report:
-1. Exact firmware version shown on splash.
-2. Exact action sequence that produced issue.
+Please report each issue with:
+
+1. Firmware version shown on splash screen.
+2. Exact action sequence.
 3. Expected result vs actual result.
-4. Whether issue is reproducible (always/sometimes/once).
-5. Photos/video if UI-related.
+4. Reproducibility (`always` / `sometimes` / `once`).
+5. Photo/video for UI-related issues.
+
+## Test Documents
+
+- Main checklist: `docs/testing/hardware-validation-checklist.md`
+- Session log template: `docs/testing/validation-session-template.md`
+- Beta release checklist: `docs/release/beta-checklist.md`

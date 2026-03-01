@@ -58,11 +58,11 @@ Tester: Per Takman
 ## Sign-off
 
 - Baseline status: IN PROGRESS
-- Next action: Re-run against current checklist IDs T01-T36 (guided ZERO/RECAL, immediate MODE, ACTION-button roles, freeze immediacy, and touch/serial/web sync).
+- Next action: Re-run against current checklist IDs T01-T39 (guided ZERO/OFFSET CAL, immediate MODE, ACTION-button roles, freeze immediacy, and touch/serial/web sync).
 
 ## Additional Test Coverage To Include (Current UI/FW)
 
-- Guided ZERO/RECAL workflow parity:
+- Guided ZERO/OFFSET CAL workflow parity:
   - touch-started workflow must appear in serial/web state
   - serial/web-started workflow must appear on-screen
   - `CONFIRM`/`CANCEL` parity across touch, ACTION button, serial (`c`/`x`), and web controls
@@ -74,7 +74,7 @@ Tester: Per Takman
 - ACTION-button role matrix:
   - Normal mode: short/long/very-long/ultra-long actions
   - ZERO workflow: short=confirm, long=cancel
-  - RECAL workflow: short=confirm, long=cancel
+  - OFFSET CAL workflow: short=confirm, long=cancel
   - ALIGN workflow: capture
 - Freeze behavior:
   - readout tap freezes immediately at currently displayed value (no visual lag)
@@ -82,3 +82,7 @@ Tester: Per Takman
 - UI readability/touchability:
   - hint lane remains outside readout area
   - button press reliability with expanded touch hit area
+- Serial readability:
+  - command response pauses stream until explicit resume (`Enter`/`Space`/`g`)
+- Remote diagnostics:
+  - diagnostics card updates continuously during normal use and workflows
