@@ -133,7 +133,7 @@ function Copy-ManualImageAssets {
 
 # Make the cover image link robust by copying it into the output folder.
 $manualDir = Split-Path (Resolve-Path $ManualPath).Path -Parent
-$coverRel = "../assets/splash-screens/device/splash_screen_OLED_optimized_2_536x240.png"
+$coverRel = "../assets/splash-screens/device/splash_screen_OLED_optimized_4_536x240.png"
 $coverPath = $null
 try {
     $coverPath = (Resolve-Path (Join-Path $manualDir $coverRel)).Path

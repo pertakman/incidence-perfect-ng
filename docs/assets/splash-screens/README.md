@@ -7,6 +7,7 @@ Files:
 - `splash_screen_2.png`
 - `splash_screen_monochrome.png`
 - `splash_screen_OLED_optimized.png`
+- `splash_screen_OLED_optimized_4.png`
 - `splash_screen_pixel_grid.png`
 - `splash_screen_ultra_minimal.png`
 - `splash_screen_variants.png`
@@ -25,7 +26,7 @@ Command (recommended default: crop + scale):
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\generate_splash.ps1 `
-  -InputPath .\docs\assets\splash-screens\splash_screen_OLED_optimized_2.png `
+  -InputPath .\docs\assets\splash-screens\splash_screen_OLED_optimized_4.png `
   -Mode crop-scale
 ```
 
