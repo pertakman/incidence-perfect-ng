@@ -34,7 +34,7 @@ Use this checklist before delivering firmware to external beta testers.
 
 - [ ] `README.md` reflects actual behavior in shipped build.
 - [ ] Tester handoff note is updated with FW version and known issues.
-- [ ] Test session logged in `docs/testing/validation-session-template.md`.
+- [ ] Test session logged in `docs/testing/session-logs/YYYY-MM-DD-validation-session.md` (using `docs/testing/validation-session-template.md`).
 
 ## 6) Ship
 

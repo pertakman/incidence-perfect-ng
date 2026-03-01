@@ -132,6 +132,19 @@ Acceptance:
 - Add beta tests for network flows.
 - Update manual and tester handoff checklist.
 
+## Phase E: OTA Update Exploration
+
+- Evaluate OTA mechanism options:
+  - browser-triggered HTTP update flow from the web UI
+  - `ArduinoOTA` workflow for developer/service updates
+- Define update safety model:
+  - firmware version gating
+  - package integrity verification (checksum/signature)
+  - behavior on interrupted updates (network/power loss)
+- Define UX + operations:
+  - show current firmware version and update status/progress
+  - define recovery/support procedure for failed OTA
+
 ## Test Matrix Additions
 
 Add to `docs/testing/hardware-validation-checklist.md`:
@@ -141,6 +154,7 @@ Add to `docs/testing/hardware-validation-checklist.md`:
 - MODE/ALIGN workflow parity from web
 - STA connect + mDNS resolution
 - AP fallback when STA unavailable
+- OTA update success/failure and recovery behavior
 
 ## Why This Is The Right First Solution
 

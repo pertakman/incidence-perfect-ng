@@ -54,4 +54,5 @@ Please report each issue with:
 
 - Main checklist: `docs/testing/hardware-validation-checklist.md`
 - Session log template: `docs/testing/validation-session-template.md`
+- Session logs (history): `docs/testing/session-logs/`
 - Beta release checklist: `docs/release/beta-checklist.md`

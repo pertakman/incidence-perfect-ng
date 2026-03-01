@@ -8,6 +8,7 @@ Use this checklist against the current firmware build to establish a known-good 
 - Board powered over USB and responsive.
 - Serial Monitor open at `115200`.
 - Device resting on a stable, mostly level surface.
+- For each run, create a dated protocol: `docs/testing/session-logs/YYYY-MM-DD-validation-session.md` (from `docs/testing/validation-session-template.md`).
 
 ## Known Current UI Limitations
 

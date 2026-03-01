@@ -69,6 +69,7 @@ Use this before first-time flashing a new hardware unit.
   - ZERO pending: confirm ZERO
   - OFFSET CAL pending: confirm OFFSET CAL
   - otherwise: start + confirm guided OFFSET CAL
+  - note: the normal-mode `c` start+confirm shortcut is intentional
 - `y`: explicit confirm (ZERO/OFFSET CAL workflows only)
 - `p`: explicit capture (ALIGN only)
 - `o`: start guided OFFSET CAL workflow (confirm with `c`, cancel with `x`)
@@ -227,8 +228,11 @@ Examples:
 - `docs/assets/splash-screens/`: splash screen image assets
 - `docs/architecture/`: design notes and diagrams
 - `docs/testing/`: hardware validation workflow and test logs
+- `docs/testing/session-logs/`: dated validation session protocols
+- `docs/manual/releases/`: versioned manual artifacts intended for sharing
+- `docs/manual/dist/`: local generated/manual build outputs (historical snapshots; may include legacy wording)
 
-## Backlog
+## Active Backlog
 
 1. Beta hardening
 - Status: Partial
@@ -238,66 +242,66 @@ Examples:
 
 2. UX and control polish
 - Status: Partial
-- Done:
-  - ACTION-button hold hint readability improved from field feedback.
-  - On-screen ACTION-button long-press progress indicator added for short/long/very-long/ultra-long thresholds.
 - Remaining:
   - Tune ACTION hold thresholds from real usage (`~1.2s / ~2.2s / ~3.2s`).
 
-3. Documentation cleanup
-- Status: Done
-- Completed:
-  - `docs/testing/hardware-validation-checklist.md` updated for guided ZERO/OFFSET CAL, immediate MODE, and full ALIGN flow.
-  - `docs/testing/validation-session-template.md` updated with expanded current test matrix.
-
-4. Connectivity exploration
+3. Connectivity exploration
 - Status: Partial
-- Done:
-  - Phase A foundation implemented:
-    - AP mode phone access
-    - web UI + API telemetry/state
-    - remote commands (`zero`, `axis`, `freeze`, `rotate`, `offset_cal`, `mode`, `align`)
 - Remaining:
-  - STA mode + hostname (`.local`) onboarding
-  - auth hardening and network test matrix
+  - STA mode + hostname (`.local`) onboarding.
+  - Auth hardening and network test matrix.
 - Plan document:
   - `docs/architecture/remote-control-plan.md`
 
-5. Release/versioning
-- Status: Done
-- Completed:
-  - Firmware version format `YYYY.M.X` adopted.
-  - Build-time auto version generation implemented.
-  - Optional override for release candidates via `FW_VERSION_OVERRIDE`.
-
-6. Beta release process
-- Status: Done
-- Completed:
-  - Added `docs/release/beta-checklist.md`.
-  - Added `docs/release/tester-handoff-note.md`.
-  - Added `docs/release/beta-version-and-tag-commands.md`.
-
-7. 2010-to-NG improvement track (cleanup and observability)
+4. 2010-to-NG improvement track (cleanup and observability)
 - Status: In progress
-- Priority ranking (best bang-for-buck first):
-  - `P1` Command model cleanup:
-    - keep `c` as primary context action
-    - add explicit confirm/capture/cancel aliases so workflows are less ambiguous
-  - `P2` Diagnostics visibility:
-    - add runtime status dump (offsets/zero/alignment/workflow state)
-    - add one-shot raw sample command in addition to 5 Hz stream toggle
-  - `P3` Large-angle conditioning clarity:
-    - expose roll-conditioning state to remote UI
-    - warn users when roll reliability is reduced near high pitch angles
-  - `P4` Guided diagnostics page:
-    - add remote diagnostic panel for raw/corrected vectors and workflow state
+- Remaining priorities:
   - `P5` Command grammar modernization:
     - optional future line-based parser for multi-character serial commands
   - `P6` Field tuning controls:
     - expose filter/sampling constants for validation builds
   - `P7` Optional theta channel:
     - evaluate whether legacy `theta` adds practical value for target use-cases
-- Started now:
+
+5. OTA update exploration (installation-base maintenance)
+- Status: New
+- Remaining:
+  - Evaluate OTA approach on ESP32-S3 (`HTTPUpdate`/web-triggered flow vs `ArduinoOTA`).
+  - Define OTA safety requirements (version gating, integrity check, interrupted-update behavior).
+  - Add OTA validation matrix (success/failure paths, bad package, network loss, power-loss during update).
+
+## Completed Milestones
+
+1. Documentation cleanup
+- Status: Done
+- Completed:
+  - `docs/testing/hardware-validation-checklist.md` updated for guided ZERO/OFFSET CAL, immediate MODE, and full ALIGN flow.
+  - `docs/testing/validation-session-template.md` updated with expanded current test matrix.
+
+2. Connectivity exploration (Phase A foundation)
+- Status: Done
+- Completed:
+  - AP mode phone access.
+  - Web UI + API telemetry/state.
+  - Remote commands (`zero`, `axis`, `freeze`, `rotate`, `offset_cal`, `mode`, `align`).
+
+3. Release/versioning
+- Status: Done
+- Completed:
+  - Firmware version format `YYYY.M.X` adopted.
+  - Build-time auto version generation implemented.
+  - Optional override for release candidates via `FW_VERSION_OVERRIDE`.
+
+4. Beta release process
+- Status: Done
+- Completed:
+  - Added `docs/release/beta-checklist.md`.
+  - Added `docs/release/tester-handoff-note.md`.
+  - Added `docs/release/beta-version-and-tag-commands.md`.
+
+5. 2010-to-NG improvement track (completed priorities)
+- Completed:
   - `P1` explicit serial aliases added (`y`, `p`, `n`) with legacy `c` preserved.
   - `P2` status/raw diagnostics added (`s`, `D`, help `h/?`).
   - `P3` roll-conditioning telemetry + web warning added.
+  - `P4` guided diagnostics page in web UI.
