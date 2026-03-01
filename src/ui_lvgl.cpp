@@ -93,7 +93,7 @@ typedef enum {
   UI_STATE_ALIGN,
   UI_STATE_MODE,
   UI_STATE_ZERO,
-  UI_STATE_RECAL
+  UI_STATE_OFFSET_CAL
 } ui_state_t;
 
 static ui_state_t ui_state = UI_STATE_NORMAL;
@@ -173,15 +173,16 @@ static void process_mode_pending()
 
 static void update_status_label()
 {
-  static char last[64] = "";
-  char buf[64];
+  static char last[72] = "";
+  char buf[72];
   const char *orientation_text =
     (orientationMode == MODE_SCREEN_VERTICAL) ? "SCREEN VERTICAL" : "SCREEN UP";
-  snprintf(buf, sizeof(buf), "%s | %s | ROT %d | %s",
+  snprintf(buf, sizeof(buf), "%s | %s | ROT %d | %s%s",
            orientation_text,
            axis_mode_text(),
            displayRotated ? 180 : 0,
-           measurementIsFrozen() ? "FROZEN" : "LIVE");
+           measurementIsFrozen() ? "FROZEN" : "LIVE",
+           rollConditionIsLow() ? " | !" : "");
 
   if (strcmp(buf, last) != 0) {
     lv_label_set_text(label_mode, buf);
@@ -285,8 +286,8 @@ static void update_boot_hint_label()
       }
       progress_pct = (int)zeroWorkflowProgressPercent();
     }
-  } else if (recalibrationWorkflowIsActive()) {
-    if (!recalibrationWorkflowIsConfirmed()) {
+  } else if (offsetCalibrationWorkflowIsActive()) {
+    if (!offsetCalibrationWorkflowIsConfirmed()) {
       if (bootHoldIsActive()) {
         const unsigned long hold_ms = bootHoldDurationMs();
         if (hold_ms < 1200) {
@@ -304,14 +305,14 @@ static void update_boot_hint_label()
         snprintf(buf, sizeof(buf), "Reposition with %s", target_text);
       }
     } else {
-      const float rem = recalibrationWorkflowRemainingSeconds();
+      const float rem = offsetCalibrationWorkflowRemainingSeconds();
       if (rem > 0.10f) {
         const float rem_show = countdown_display_seconds(rem);
-        snprintf(buf, sizeof(buf), "Recalibrating %.1f s", rem_show);
+        snprintf(buf, sizeof(buf), "Offset cal %.1f s", rem_show);
       } else {
         snprintf(buf, sizeof(buf), "Applying...");
       }
-      progress_pct = (int)recalibrationWorkflowProgressPercent();
+      progress_pct = (int)offsetCalibrationWorkflowProgressPercent();
     }
   } else if (now_ms < zero_feedback_until_ms) {
     snprintf(buf, sizeof(buf), "Zero applied - hold still briefly");
@@ -334,11 +335,11 @@ static void update_boot_hint_label()
       !modeWorkflowIsActive() &&
       !zeroWorkflowIsActive() &&
       !alignmentIsActive() &&
-      !recalibrationWorkflowIsActive()) {
+      !offsetCalibrationWorkflowIsActive()) {
     const unsigned long hold_ms = bootHoldDurationMs();
     const float to_axis = (hold_ms < 1200) ? countdown_display_seconds((1200 - hold_ms) / 1000.0f) : 0.0f;
     const float to_mode = (hold_ms < 2200) ? countdown_display_seconds((2200 - hold_ms) / 1000.0f) : 0.0f;
-    const float to_recal = (hold_ms < 3200) ? countdown_display_seconds((3200 - hold_ms) / 1000.0f) : 0.0f;
+    const float to_offset_cal = (hold_ms < 3200) ? countdown_display_seconds((3200 - hold_ms) / 1000.0f) : 0.0f;
 
     if (hold_ms < 1200) {
       snprintf(buf, sizeof(buf),
@@ -352,11 +353,11 @@ static void update_boot_hint_label()
       progress_pct = (int)((hold_ms * 100UL) / 3200UL);
     } else if (hold_ms < 3200) {
       snprintf(buf, sizeof(buf),
-               "Release: MODE | RECAL in %.1f s",
-               to_recal);
+               "Release: MODE | OFFSET CAL in %.1f s",
+               to_offset_cal);
       progress_pct = (int)((hold_ms * 100UL) / 3200UL);
     } else {
-      snprintf(buf, sizeof(buf), "Release: RECAL");
+      snprintf(buf, sizeof(buf), "Release: OFFSET CAL");
       progress_pct = 100;
     }
   }
@@ -531,7 +532,7 @@ static void apply_ui_state()
       apply_axis_layout();
       break;
 
-    case UI_STATE_RECAL:
+    case UI_STATE_OFFSET_CAL:
       lv_obj_clear_flag(label_mode, LV_OBJ_FLAG_HIDDEN);
       lv_obj_add_flag(label_header, LV_OBJ_FLAG_HIDDEN);
       lv_obj_add_flag(instr_grp, LV_OBJ_FLAG_HIDDEN);
@@ -600,8 +601,8 @@ static void on_zero_pressed(lv_event_t *)
     ui_set_state(UI_STATE_NORMAL);
     return;
   }
-  if (ui_state == UI_STATE_RECAL) {
-    recalibrationWorkflowCancel();
+  if (ui_state == UI_STATE_OFFSET_CAL) {
+    offsetCalibrationWorkflowCancel();
     ui_set_state(UI_STATE_NORMAL);
     return;
   }
@@ -621,8 +622,8 @@ static void on_zero_long_pressed(lv_event_t *)
   if (ui_state != UI_STATE_NORMAL) return;
   zero_long_press_handled = true;
   modeWorkflowCancel();
-  recalibrationWorkflowStart();
-  ui_set_state(UI_STATE_RECAL);
+  offsetCalibrationWorkflowStart();
+  ui_set_state(UI_STATE_OFFSET_CAL);
 }
 
 static void on_axis_pressed(lv_event_t *)
@@ -630,7 +631,7 @@ static void on_axis_pressed(lv_event_t *)
   if (ui_state != UI_STATE_NORMAL) return;
   modeWorkflowCancel();
   zeroWorkflowCancel();
-  recalibrationWorkflowCancel();
+  offsetCalibrationWorkflowCancel();
   cycleAxisMode();
 }
 
@@ -642,9 +643,9 @@ static void on_mode_pressed(lv_event_t *)
     return;
   }
 
-  if (ui_state == UI_STATE_RECAL) {
-    if (!recalibrationWorkflowIsConfirmed()) {
-      recalibrationWorkflowConfirm();
+  if (ui_state == UI_STATE_OFFSET_CAL) {
+    if (!offsetCalibrationWorkflowIsConfirmed()) {
+      offsetCalibrationWorkflowConfirm();
     }
     return;
   }
@@ -664,7 +665,7 @@ static void on_readout_pressed(lv_event_t *)
   if (ui_state != UI_STATE_NORMAL) return;
   modeWorkflowCancel();
   zeroWorkflowCancel();
-  recalibrationWorkflowCancel();
+  offsetCalibrationWorkflowCancel();
   toggleMeasurementFreeze();
 }
 
@@ -673,7 +674,7 @@ static void on_align_pressed(lv_event_t *)
   if (ui_state == UI_STATE_NORMAL) {
     modeWorkflowCancel();
     zeroWorkflowCancel();
-    recalibrationWorkflowCancel();
+    offsetCalibrationWorkflowCancel();
     alignmentStart();
     if (alignmentIsActive()) ui_set_state(UI_STATE_ALIGN);
   } else if (ui_state == UI_STATE_ALIGN) {
@@ -691,7 +692,7 @@ static void on_rotate_pressed(lv_event_t *)
   if (ui_state == UI_STATE_NORMAL) {
     modeWorkflowCancel();
     zeroWorkflowCancel();
-    recalibrationWorkflowCancel();
+    offsetCalibrationWorkflowCancel();
     toggleRotation();
   }
 }
@@ -1002,7 +1003,7 @@ static void update_ui()
   if (!align_active) {
     const bool mode_active = modeWorkflowIsActive();
     const bool zero_active = zeroWorkflowIsActive();
-    const bool recal_active = recalibrationWorkflowIsActive();
+    const bool offset_cal_active = offsetCalibrationWorkflowIsActive();
     if (mode_active && ui_state != UI_STATE_MODE) {
       ui_set_state(UI_STATE_MODE);
     } else if (!mode_active && ui_state == UI_STATE_MODE) {
@@ -1016,9 +1017,9 @@ static void update_ui()
       }
     }
     if (!mode_active && !zero_active) {
-      if (recal_active && ui_state != UI_STATE_RECAL) {
-        ui_set_state(UI_STATE_RECAL);
-      } else if (!recal_active && ui_state == UI_STATE_RECAL) {
+      if (offset_cal_active && ui_state != UI_STATE_OFFSET_CAL) {
+        ui_set_state(UI_STATE_OFFSET_CAL);
+      } else if (!offset_cal_active && ui_state == UI_STATE_OFFSET_CAL) {
         ui_set_state(UI_STATE_NORMAL);
       }
     }

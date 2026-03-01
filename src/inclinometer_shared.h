@@ -23,6 +23,40 @@ extern bool displayRotated;
 extern volatile AxisDisplayMode ui_axis_mode;
 AxisDisplayMode getAxisMode(void);
 
+struct ImuDiagnosticsSample {
+  bool valid;
+  float sens_ax;
+  float sens_ay;
+  float sens_az;
+  float sens_gx;
+  float sens_gy;
+  float sens_gz;
+  float map_ax;
+  float map_ay;
+  float map_az;
+  float map_gx;
+  float map_gy;
+  float corr_ax;
+  float corr_ay;
+  float corr_az;
+  float corr_gx;
+  float corr_gy;
+  float angle_roll;
+  float angle_pitch;
+};
+
+struct CalibrationStateSnapshot {
+  float bias_ax;
+  float bias_ay;
+  float bias_az;
+  float bias_gx;
+  float bias_gy;
+  float zero_roll;
+  float zero_pitch;
+  float align_roll;
+  float align_pitch;
+};
+
 // Forward declarations used across files
 void setOrientation(OrientationMode m);
 
@@ -39,6 +73,8 @@ void cycleAxisMode(void);
 void toggleRotation(void);
 void toggleMeasurementFreeze(void);
 bool measurementIsFrozen(void);
+float rollConditionPercent(void);
+bool rollConditionIsLow(void);
 bool bootHoldIsActive(void);
 unsigned long bootHoldDurationMs(void);
 bool modeWorkflowIsActive(void);
@@ -58,12 +94,14 @@ void alignmentCapture(void);
 void alignmentGetInstruction(char *buf, unsigned int buf_size);
 bool alignmentCaptureInProgress(void);
 float alignmentCaptureProgressPercent(void);
-void runQuickRecalibration(void);
+void runQuickOffsetCalibration(void);
 
-void recalibrationWorkflowStart(void);
-void recalibrationWorkflowConfirm(void);
-void recalibrationWorkflowCancel(void);
-bool recalibrationWorkflowIsActive(void);
-bool recalibrationWorkflowIsConfirmed(void);
-float recalibrationWorkflowRemainingSeconds(void);
-float recalibrationWorkflowProgressPercent(void);
+void offsetCalibrationWorkflowStart(void);
+void offsetCalibrationWorkflowConfirm(void);
+void offsetCalibrationWorkflowCancel(void);
+bool offsetCalibrationWorkflowIsActive(void);
+bool offsetCalibrationWorkflowIsConfirmed(void);
+float offsetCalibrationWorkflowRemainingSeconds(void);
+float offsetCalibrationWorkflowProgressPercent(void);
+void getImuDiagnosticsSample(ImuDiagnosticsSample *out_sample);
+void getCalibrationStateSnapshot(CalibrationStateSnapshot *out_snapshot);

@@ -58,7 +58,7 @@ Use this before first-time flashing a new hardware unit.
    - `ZERO` works
    - `AXIS` cycles (`BOTH -> ROLL -> PITCH`)
    - `MODE` toggles orientation (`SCREEN UP <-> SCREEN VERTICAL`)
-   - `RECAL` workflow can be started (touch long-press `ZERO`, serial `k` or `c`, web `RECAL`)
+   - `OFFSET CAL` workflow can be started (touch long-press `ZERO`, serial `o` or `c`, web `OFFSET CAL`)
    - `ROTATE` flips 180 and persists after reboot
 
 ## Serial Commands
@@ -67,39 +67,46 @@ Use this before first-time flashing a new hardware unit.
 - `c`: context action
   - ALIGN active: capture current ALIGN step
   - ZERO pending: confirm ZERO
-  - RECAL pending: confirm RECAL
-  - otherwise: start + confirm guided RECAL
-- `k`: start guided recalibration workflow (confirm with `c`, cancel with `x`)
+  - OFFSET CAL pending: confirm OFFSET CAL
+  - otherwise: start + confirm guided OFFSET CAL
+- `y`: explicit confirm (ZERO/OFFSET CAL workflows only)
+- `p`: explicit capture (ALIGN only)
+- `o`: start guided OFFSET CAL workflow (confirm with `c`, cancel with `x`)
 - `C`: start guided 6-step mechanical alignment workflow (shared by touch UI and serial)
 - `u`: set orientation mode to `SCREEN UP` immediately
 - `v`: set orientation mode to `SCREEN VERTICAL` immediately
 - `m`: toggle orientation mode immediately
-- `x`: cancel pending RECAL / ALIGN
+- `x` or `n`: cancel active workflow(s)
 
-Touch UI, serial, ACTION button, and web share the same ZERO/RECAL/ALIGN state.
+Touch UI, serial, ACTION button, and web share the same ZERO/OFFSET CAL/ALIGN state.
 - `a`: cycle axis display/output (`BOTH -> ROLL -> PITCH`)
 - `r`: toggle 180-degree screen rotation
 - `d`: toggle raw IMU debug stream (5 Hz)
+- `D`: print one raw IMU sample immediately
+- `s`: print runtime status snapshot (mode, workflow states, offsets/references)
+- `h` or `?`: print serial help
+- After any serial command response, live scrolling output pauses.
+  - Press `Enter`, `Space`, or send `g` to resume live stream.
 
 ## Hardware Controls
 
 - `ACTION button` (`GPIO0`, active-low, labeled `BOOT/GPO` on board):
   - In ALIGN workflow: press/release = `CAPTURE`
   - In ZERO workflow: short press = `CONFIRM`, long press = `CANCEL`
-  - In RECAL workflow: short press = `CONFIRM`, long press = `CANCEL`
+  - In OFFSET CAL workflow: short press = `CONFIRM`, long press = `CANCEL`
   - In normal mode short press: toggle freeze (`LIVE` <-> `FROZEN`)
   - In normal mode long press (~1.2s): cycle axis (`BOTH -> ROLL -> PITCH`)
   - In normal mode very long press (~2.2s): toggle orientation (`SCREEN UP` <-> `SCREEN VERTICAL`)
-  - In normal mode ultra long press (~3.2s): start RECAL workflow
+  - In normal mode ultra long press (~3.2s): start OFFSET CAL workflow
   - While holding in normal mode, an on-screen hint shows the release action and countdown to the next action threshold.
 - Touch readout area:
   - Tap the roll/pitch value area to toggle freeze (`LIVE` <-> `FROZEN`)
 - UI behavior:
   - `ZERO` is guided (`CONFIRM`/`CANCEL`, stillness timer + averaging progress bar).
-  - `ZERO` long press starts RECAL workflow.
+  - `ZERO` long press starts OFFSET CAL workflow.
   - Button touch targets are extended to improve tap reliability.
   - `MODE` is immediate (loads mode-specific calibration/zero settings from EEPROM).
-  - RECAL is guided (`CONFIRM`/`CANCEL`, stillness timer + progress bar).
+  - OFFSET CAL is guided (`CONFIRM`/`CANCEL`, stillness timer + progress bar).
 
 ## Remote Control (Phase A)
 
@@ -120,36 +127,46 @@ Available in Phase A:
   - `AXIS`
   - `FREEZE`
   - `ROTATE`
-  - `RECAL` workflow (`RECAL` -> `CONFIRM`/`CANCEL`)
+  - `OFFSET CAL` workflow (`OFFSET CAL` -> `CONFIRM`/`CANCEL`)
   - `MODE` immediate toggle or direct set
   - `ALIGN` start + `CAPTURE` + `CANCEL`
 - Context-aware controls:
-  - `CONFIRM`/`CANCEL` are shown only during ZERO/RECAL workflows
+  - `CONFIRM`/`CANCEL` are shown only during ZERO/OFFSET CAL workflows
   - `CAPTURE`/`CANCEL` are shown only during ALIGN workflow
 - Progress bar:
   - ZERO hold/sampling progress
-  - RECAL hold/sampling progress
+  - OFFSET CAL hold/sampling progress
   - ALIGN capture progress
+- Roll conditioning hint:
+  - web UI now shows a warning when roll reliability is reduced near high pitch angles
+- Diagnostics panel:
+  - expandable diagnostics card with raw/remapped/corrected IMU values
+  - live offset/zero/alignment references and workflow flags
 - Workflow sync is shared across touch, serial, ACTION button, and web.
 
 API endpoints:
 - `GET /api/state`
 - `POST /api/cmd` with JSON body:
   - `{"cmd":"zero"|"axis"|"freeze"|"rotate"}`
-  - `{"cmd":"recal"|"confirm"|"cancel"}` (`zero`/`recal` open guided workflows; `confirm`/`cancel` act on active workflow)
+  - `{"cmd":"offset_cal"|"confirm"|"cancel"}` (`zero`/`offset_cal` open guided workflows; `confirm`/`cancel` act on active workflow)
   - `{"cmd":"mode_toggle"|"mode_up"|"mode_vertical"}`
   - `{"cmd":"align_start"|"capture"|"cancel"}`
 - `GET /health`
+
+State payload highlights (`GET /api/state`):
+- Main: roll/pitch, orientation, axis, rotation, live/frozen
+- Workflow: zero/mode/offset-cal/align active + progress
+- Diagnostics: sensor raw/remapped/corrected values, conditioning %, bias/zero/align refs
 
 ### `c` vs `C`
 
 - Use `c` for context action:
   - in ZERO it confirms,
-  - in normal mode it starts+confirms guided RECAL,
-  - in RECAL it confirms,
+  - in normal mode it starts+confirms guided OFFSET CAL,
+  - in OFFSET CAL it confirms,
   - in ALIGN it captures.
 - Use `C` when you need full mechanical alignment (mounting/enclosure bias correction).
-- In short: `c` handles guided runtime recalibration actions; `C` is full alignment procedure.
+- In short: `c` handles guided runtime offset calibration actions; `C` is full alignment procedure.
 
 ## Versioning Policy
 
@@ -230,7 +247,7 @@ Examples:
 3. Documentation cleanup
 - Status: Done
 - Completed:
-  - `docs/testing/hardware-validation-checklist.md` updated for guided ZERO/RECAL, immediate MODE, and full ALIGN flow.
+  - `docs/testing/hardware-validation-checklist.md` updated for guided ZERO/OFFSET CAL, immediate MODE, and full ALIGN flow.
   - `docs/testing/validation-session-template.md` updated with expanded current test matrix.
 
 4. Connectivity exploration
@@ -239,7 +256,7 @@ Examples:
   - Phase A foundation implemented:
     - AP mode phone access
     - web UI + API telemetry/state
-    - remote commands (`zero`, `axis`, `freeze`, `rotate`, `recal`, `mode`, `align`)
+    - remote commands (`zero`, `axis`, `freeze`, `rotate`, `offset_cal`, `mode`, `align`)
 - Remaining:
   - STA mode + hostname (`.local`) onboarding
   - auth hardening and network test matrix
@@ -259,3 +276,28 @@ Examples:
   - Added `docs/release/beta-checklist.md`.
   - Added `docs/release/tester-handoff-note.md`.
   - Added `docs/release/beta-version-and-tag-commands.md`.
+
+7. 2010-to-NG improvement track (cleanup and observability)
+- Status: In progress
+- Priority ranking (best bang-for-buck first):
+  - `P1` Command model cleanup:
+    - keep `c` as primary context action
+    - add explicit confirm/capture/cancel aliases so workflows are less ambiguous
+  - `P2` Diagnostics visibility:
+    - add runtime status dump (offsets/zero/alignment/workflow state)
+    - add one-shot raw sample command in addition to 5 Hz stream toggle
+  - `P3` Large-angle conditioning clarity:
+    - expose roll-conditioning state to remote UI
+    - warn users when roll reliability is reduced near high pitch angles
+  - `P4` Guided diagnostics page:
+    - add remote diagnostic panel for raw/corrected vectors and workflow state
+  - `P5` Command grammar modernization:
+    - optional future line-based parser for multi-character serial commands
+  - `P6` Field tuning controls:
+    - expose filter/sampling constants for validation builds
+  - `P7` Optional theta channel:
+    - evaluate whether legacy `theta` adds practical value for target use-cases
+- Started now:
+  - `P1` explicit serial aliases added (`y`, `p`, `n`) with legacy `c` preserved.
+  - `P2` status/raw diagnostics added (`s`, `D`, help `h/?`).
+  - `P3` roll-conditioning telemetry + web warning added.

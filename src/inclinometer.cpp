@@ -119,19 +119,19 @@ static float modeRefRoll = 0.0f;
 static float modeRefPitch = 0.0f;
 static const unsigned long modeStillMs = 1500;
 static const float modeMotionThreshDeg = 0.8f;
-static bool recalPending = false;
-static bool recalConfirmed = false;
-static unsigned long recalStartMs = 0;
-static float recalRefRoll = 0.0f;
-static float recalRefPitch = 0.0f;
-static bool recalSampling = false;
-static int recalSampleCount = 0;
-static const int recalSampleTarget = 125; // ~2.5 s at 20 ms loop
-static float recalSumAx = 0.0f;
-static float recalSumAy = 0.0f;
-static float recalSumAz = 0.0f;
-static float recalSumGx = 0.0f;
-static float recalSumGy = 0.0f;
+static bool offsetCalPending = false;
+static bool offsetCalConfirmed = false;
+static unsigned long offsetCalStartMs = 0;
+static float offsetCalRefRoll = 0.0f;
+static float offsetCalRefPitch = 0.0f;
+static bool offsetCalSampling = false;
+static int offsetCalSampleCount = 0;
+static const int offsetCalSampleTarget = 125; // ~2.5 s at 20 ms loop
+static float offsetCalSumAx = 0.0f;
+static float offsetCalSumAy = 0.0f;
+static float offsetCalSumAz = 0.0f;
+static float offsetCalSumGx = 0.0f;
+static float offsetCalSumGy = 0.0f;
 static bool zeroPending = false;
 static bool zeroConfirmed = false;
 static bool zeroSampling = false;
@@ -149,8 +149,18 @@ static float lastRawAy = 0.0f;
 static float lastRawAz = 0.0f;
 static float lastRawGx = 0.0f;
 static float lastRawGy = 0.0f;
+static float lastCorrAx = 0.0f;
+static float lastCorrAy = 0.0f;
+static float lastCorrAz = 0.0f;
+static float lastCorrGx = 0.0f;
+static float lastCorrGy = 0.0f;
+static QMI8658_Data lastSensorData = {};
+static bool lastSensorDataValid = false;
 static bool rawStreamEnabled = false;
 static unsigned long rawStreamLastMs = 0;
+static float rollConditionPct = 100.0f;
+static bool rollConditionLowFlag = false;
+static bool serialOutputPaused = false;
 
 enum AlignmentStep {
   ALIGN_SCREEN_UP = 0,
@@ -211,6 +221,11 @@ bool loadZeroReferenceFromEeprom(OrientationMode mode);
 void saveZeroReferenceToEeprom(OrientationMode mode);
 void printMode();
 void printRawImuSample(const QMI8658_Data &d, float ax, float ay, float az, float gx, float gy);
+void printSerialHelp();
+void printRuntimeStatus();
+void serialContextAction();
+void pauseSerialOutputUntilResume();
+void resumeSerialOutput();
 void handleSerial();
 const char *alignmentStepText(AlignmentStep step);
 const char *alignmentStepHintText(AlignmentStep step);
@@ -219,11 +234,11 @@ void finalizeAlignment();
 void handleBootButton();
 void processModeWorkflow();
 void processAlignmentCapture();
-void processRecalibrationWorkflow();
+void processOffsetCalibrationWorkflow();
 void processZeroWorkflow();
-void recalibrationWorkflowStart();
-void recalibrationWorkflowConfirm();
-void recalibrationWorkflowCancel();
+void offsetCalibrationWorkflowStart();
+void offsetCalibrationWorkflowConfirm();
+void offsetCalibrationWorkflowCancel();
 
 // ============================================================
 // AXIS REMAPPING  (FROZEN v4.0 BEHAVIOR)
@@ -335,6 +350,8 @@ void loop_inclinometer() {
 
   QMI8658_Data d;
   if (!imu.readSensorData(d)) return;
+  lastSensorData = d;
+  lastSensorDataValid = true;
 
   // Time delta for gyro integration
   unsigned long now = millis();
@@ -355,6 +372,11 @@ void loop_inclinometer() {
   // Remove sensor bias offsets
   ax -= ax_off; ay -= ay_off; az -= az_off;
   gx -= gx_off; gy -= gy_off;
+  lastCorrAx = ax;
+  lastCorrAy = ay;
+  lastCorrAz = az;
+  lastCorrGx = gx;
+  lastCorrGy = gy;
 
   // Accelerometer-derived angles (tool frame)
   float roll_acc  = atan2(ay, az) * RAD_TO_DEG;
@@ -373,6 +395,18 @@ void loop_inclinometer() {
   float r = roll_phys  + align_roll  - roll_zero;
   float p = pitch_phys + align_pitch - pitch_zero;
 
+  // Roll reliability degrades near +/-90 degree pitch.
+  // Expose a simple conditioning metric to remote diagnostics.
+  const float absPitch = fabsf(p);
+  if (absPitch <= 70.0f) {
+    rollConditionPct = 100.0f;
+  } else if (absPitch >= 90.0f) {
+    rollConditionPct = 0.0f;
+  } else {
+    rollConditionPct = ((90.0f - absPitch) / 20.0f) * 100.0f;
+  }
+  rollConditionLowFlag = (absPitch >= 80.0f);
+
   // DISPLAY-ONLY semantic roll correction
   // (kept separate from alignment and physics)
   if (orientationMode == MODE_SCREEN_UP)
@@ -385,16 +419,20 @@ void loop_inclinometer() {
 
   processModeWorkflow();
   processZeroWorkflow();
-  processRecalibrationWorkflow();
+  processOffsetCalibrationWorkflow();
   processAlignmentCapture();
 
   // Output
-  if (rawStreamEnabled) {
+  if (!serialOutputPaused && rawStreamEnabled) {
     if ((now - rawStreamLastMs) >= 200) { // 5 Hz debug stream
       printRawImuSample(d, ax, ay, az, gx, gy);
       rawStreamLastMs = now;
     }
-  } else if (!alignmentIsActive() && !modePending && !zeroPending && !recalPending) {
+  } else if (!serialOutputPaused &&
+             !alignmentIsActive() &&
+             !modePending &&
+             !zeroPending &&
+             !offsetCalPending) {
     switch (ui_axis_mode) {
       case AXIS_ROLL:
         Serial.print("Roll: ");
@@ -428,30 +466,62 @@ void loop_inclinometer() {
 void handleSerial() {
   if (!Serial.available()) return;
   char c = Serial.read();
+  bool shouldPause = true;
+
+  if (serialOutputPaused &&
+      (c == '\r' || c == '\n' || c == ' ' || c == 'g' || c == 'G')) {
+    resumeSerialOutput();
+    return;
+  }
 
   switch (c) {
+    case '\r':
+    case '\n':
+    case ' ':
+    case '\t':
+      shouldPause = false;
+      break;
+    case '?':
+    case 'h':
+      printSerialHelp();
+      break;
+    case 's':
+      printRuntimeStatus();
+      break;
     case 'z':
       Serial.println("Serial 'z': start guided zero");
       zeroWorkflowStart();
       break;
     case 'c':
-      if (alignmentIsActive()) {
-        Serial.println("Serial 'c': CAPTURE");
-        alignmentCapture();
-      } else if (modePending && !modeConfirmed) {
-        Serial.println("Serial 'c': CONFIRM mode workflow");
+      serialContextAction();
+      break;
+    case 'y':
+      if (modePending && !modeConfirmed) {
+        Serial.println("Serial 'y': CONFIRM mode workflow");
         modeWorkflowConfirm();
       } else if (zeroPending && !zeroConfirmed) {
-        Serial.println("Serial 'c': CONFIRM zero workflow");
+        Serial.println("Serial 'y': CONFIRM zero workflow");
         zeroWorkflowConfirm();
-      } else if (recalPending && !recalConfirmed) {
-        Serial.println("Serial 'c': CONFIRM recalibration workflow");
-        recalibrationWorkflowConfirm();
+      } else if (offsetCalPending && !offsetCalConfirmed) {
+        Serial.println("Serial 'y': CONFIRM offset calibration workflow");
+        offsetCalibrationWorkflowConfirm();
       } else {
-        Serial.println("Serial 'c': guided recalibration start+confirm");
-        recalibrationWorkflowStart();
-        recalibrationWorkflowConfirm();
+        Serial.println("Serial 'y': no confirmable workflow active");
       }
+      break;
+    case 'p':
+      if (alignmentIsActive()) {
+        Serial.println("Serial 'p': CAPTURE");
+        alignmentCapture();
+      } else {
+        Serial.println("Serial 'p': CAPTURE requires ALIGN");
+      }
+      break;
+    case 'n':
+      modeWorkflowCancel();
+      zeroWorkflowCancel();
+      offsetCalibrationWorkflowCancel();
+      alignmentCancel();
       break;
     case 'C': alignmentStart(); break;
     case 'u': modeWorkflowStart(MODE_SCREEN_UP); break;
@@ -460,10 +530,10 @@ void handleSerial() {
     case 'x':
       modeWorkflowCancel();
       zeroWorkflowCancel();
-      recalibrationWorkflowCancel();
+      offsetCalibrationWorkflowCancel();
       alignmentCancel();
       break;
-    case 'k': recalibrationWorkflowStart(); break;
+    case 'o': offsetCalibrationWorkflowStart(); break;
     case 'a': cycleAxisMode(); break;
     case 'r': toggleRotation(); break;
     case 'd':
@@ -472,20 +542,135 @@ void handleSerial() {
       Serial.print("Raw IMU stream: ");
       Serial.println(rawStreamEnabled ? "ON (5 Hz)" : "OFF");
       break;
+    case 'D':
+      if (!lastSensorDataValid) {
+        Serial.println("No IMU sample available yet");
+        break;
+      } else {
+        printRawImuSample(lastSensorData, lastCorrAx, lastCorrAy, lastCorrAz, lastCorrGx, lastCorrGy);
+      }
+      break;
+    default:
+      Serial.print("Unknown command: '");
+      Serial.print(c);
+      Serial.println("' (send 'h' for help)");
+      break;
+  }
 
+  if (shouldPause) {
+    pauseSerialOutputUntilResume();
   }
 }
 
 // ============================================================
-// ALIGNMENT v4.2 — 6 ORIENTATIONS (ANGLE DOMAIN ONLY)
+// SERIAL HELPERS
 // ============================================================
-//
-// Uses redundant measurements to estimate CONSTANT angle bias.
-// Does NOT:
-//   - rotate vectors
-//   - estimate gain
-//   - affect remapping or filter behavior
-//
+
+void serialContextAction() {
+  if (alignmentIsActive()) {
+    Serial.println("Serial 'c': CAPTURE");
+    alignmentCapture();
+  } else if (modePending && !modeConfirmed) {
+    Serial.println("Serial 'c': CONFIRM mode workflow");
+    modeWorkflowConfirm();
+  } else if (zeroPending && !zeroConfirmed) {
+    Serial.println("Serial 'c': CONFIRM zero workflow");
+    zeroWorkflowConfirm();
+  } else if (offsetCalPending && !offsetCalConfirmed) {
+    Serial.println("Serial 'c': CONFIRM offset calibration workflow");
+    offsetCalibrationWorkflowConfirm();
+  } else {
+    Serial.println("Serial 'c': guided offset calibration start+confirm");
+    offsetCalibrationWorkflowStart();
+    offsetCalibrationWorkflowConfirm();
+  }
+}
+
+void printRuntimeStatus() {
+  Serial.println();
+  Serial.println("=== STATUS ===");
+  Serial.print("FW: ");
+  Serial.println(FW_VERSION);
+  Serial.print("Orientation: ");
+  Serial.println(orientationMode == MODE_SCREEN_VERTICAL ? "SCREEN VERTICAL" : "SCREEN UP");
+  Serial.print("Axis: ");
+  switch (getAxisMode()) {
+    case AXIS_ROLL: Serial.println("ROLL"); break;
+    case AXIS_PITCH: Serial.println("PITCH"); break;
+    default: Serial.println("BOTH"); break;
+  }
+  Serial.print("Rotation: ");
+  Serial.println(displayRotated ? "180" : "0");
+  Serial.print("Freeze: ");
+  Serial.println(measurementIsFrozen() ? "FROZEN" : "LIVE");
+  Serial.print("Serial stream: ");
+  Serial.println(serialOutputPaused ? "PAUSED" : "LIVE");
+  Serial.print("Roll conditioning: ");
+  Serial.print(rollConditionPct, 0);
+  Serial.print("%");
+  if (rollConditionLowFlag) {
+    Serial.print(" (LOW near +/-90 pitch)");
+  }
+  Serial.println();
+  Serial.print("Workflows active: ");
+  Serial.print("ZERO=");
+  Serial.print(zeroPending ? "Y" : "N");
+  Serial.print(" ");
+  Serial.print("OFFSET_CAL=");
+  Serial.print(offsetCalPending ? "Y" : "N");
+  Serial.print(" MODE=");
+  Serial.print(modePending ? "Y" : "N");
+  Serial.print(" ALIGN=");
+  Serial.println(alignState.active ? "Y" : "N");
+  Serial.print("Bias offsets (ax,ay,az,gx,gy): ");
+  Serial.print(ax_off, 4); Serial.print(", ");
+  Serial.print(ay_off, 4); Serial.print(", ");
+  Serial.print(az_off, 4); Serial.print(", ");
+  Serial.print(gx_off, 4); Serial.print(", ");
+  Serial.println(gy_off, 4);
+  Serial.print("Zero refs (roll,pitch): ");
+  Serial.print(roll_zero, 3); Serial.print(", ");
+  Serial.println(pitch_zero, 3);
+  Serial.print("Align refs (roll,pitch): ");
+  Serial.print(align_roll, 3); Serial.print(", ");
+  Serial.println(align_pitch, 3);
+  Serial.println("==============");
+}
+
+void printSerialHelp() {
+  Serial.println();
+  Serial.println("Serial command help");
+  Serial.println("  z   : start guided ZERO");
+  Serial.println("  c   : context action (capture/confirm/offset cal start+confirm)");
+  Serial.println("  y   : explicit CONFIRM (ZERO/OFFSET CAL only)");
+  Serial.println("  p   : explicit CAPTURE (ALIGN only)");
+  Serial.println("  x/n : cancel active workflow(s)");
+  Serial.println("  o   : start guided OFFSET CAL");
+  Serial.println("  C   : start ALIGN (6-step)");
+  Serial.println("  u/v/m : set/toggle orientation mode");
+  Serial.println("  a   : cycle AXIS (BOTH -> ROLL -> PITCH)");
+  Serial.println("  r   : toggle 180-degree display rotation");
+  Serial.println("  d   : toggle RAW stream (5 Hz)");
+  Serial.println("  D   : print one RAW sample now");
+  Serial.println("  s   : print runtime status");
+  Serial.println("  h/? : this help");
+  Serial.println("  ENTER/SPACE/g : resume live stream after pause");
+}
+
+void pauseSerialOutputUntilResume() {
+  if (!serialOutputPaused) {
+    serialOutputPaused = true;
+    Serial.println();
+    Serial.println("[SERIAL PAUSED] Press ENTER (or SPACE/'g') to resume live stream");
+  }
+}
+
+void resumeSerialOutput() {
+  if (serialOutputPaused) {
+    serialOutputPaused = false;
+    Serial.println("[SERIAL RESUMED] live stream active");
+  }
+}
 
 void alignmentCapture(void)
 {
@@ -682,7 +867,7 @@ void zeroWorkflowStart(void) {
     return;
   }
   modeWorkflowCancel();
-  recalibrationWorkflowCancel();
+  offsetCalibrationWorkflowCancel();
   zeroPending = true;
   zeroConfirmed = false;
   zeroSampling = false;
@@ -812,11 +997,11 @@ void setOrientation(OrientationMode m) {
   initializeAngles();
 }
 
-void runQuickRecalibration(void) {
+void runQuickOffsetCalibration(void) {
   calibrateOffsets();
   saveBiasOffsetsToEeprom(orientationMode);
   initializeAngles();
-  Serial.println("Quick recalibration complete");
+  Serial.println("Quick offset calibration complete");
 }
 
 bool alignmentIsActive(void) {
@@ -914,7 +1099,7 @@ void alignmentGetInstruction(char *buf, unsigned int buf_size) {
 void alignmentStart(void) {
   modeWorkflowCancel();
   zeroWorkflowCancel();
-  recalibrationWorkflowCancel();
+  offsetCalibrationWorkflowCancel();
   if (alignState.active) {
     printAlignmentInstruction();
     return;
@@ -947,7 +1132,7 @@ void alignmentCancel(void) {
 
 void modeWorkflowStart(OrientationMode target) {
   zeroWorkflowCancel();
-  recalibrationWorkflowCancel();
+  offsetCalibrationWorkflowCancel();
   modePending = false;
   modeConfirmed = false;
   modeTargetState = target;
@@ -998,121 +1183,121 @@ float modeWorkflowProgressPercent(void) {
   return 0.0f;
 }
 
-void recalibrationWorkflowStart(void) {
+void offsetCalibrationWorkflowStart(void) {
   modeWorkflowCancel();
   zeroWorkflowCancel();
-  recalPending = true;
-  recalConfirmed = false;
-  recalSampling = false;
-  recalSampleCount = 0;
-  recalSumAx = recalSumAy = recalSumAz = 0.0f;
-  recalSumGx = recalSumGy = 0.0f;
+  offsetCalPending = true;
+  offsetCalConfirmed = false;
+  offsetCalSampling = false;
+  offsetCalSampleCount = 0;
+  offsetCalSumAx = offsetCalSumAy = offsetCalSumAz = 0.0f;
+  offsetCalSumGx = offsetCalSumGy = 0.0f;
 
   Serial.println();
-  Serial.println("Recalibration workflow");
+  Serial.println("Offset calibration workflow");
   Serial.print("Reposition with ");
   Serial.println(orientationMode == MODE_SCREEN_VERTICAL ? "SCREEN VERTICAL" : "SCREEN UP");
   Serial.println("Send 'c' to CONFIRM and hold still");
   Serial.println("Send 'x' to cancel");
 }
 
-void recalibrationWorkflowConfirm(void) {
-  if (!recalPending || recalConfirmed) return;
-  recalConfirmed = true;
-  recalSampling = false;
-  recalSampleCount = 0;
-  recalStartMs = millis();
-  recalRefRoll = roll_phys;
-  recalRefPitch = pitch_phys;
-  Serial.println("Recalibration confirmed. Hold still...");
+void offsetCalibrationWorkflowConfirm(void) {
+  if (!offsetCalPending || offsetCalConfirmed) return;
+  offsetCalConfirmed = true;
+  offsetCalSampling = false;
+  offsetCalSampleCount = 0;
+  offsetCalStartMs = millis();
+  offsetCalRefRoll = roll_phys;
+  offsetCalRefPitch = pitch_phys;
+  Serial.println("Offset calibration confirmed. Hold still...");
 }
 
-void recalibrationWorkflowCancel(void) {
-  if (!recalPending) return;
-  recalPending = false;
-  recalConfirmed = false;
-  recalSampling = false;
-  recalSampleCount = 0;
-  Serial.println("Recalibration canceled");
+void offsetCalibrationWorkflowCancel(void) {
+  if (!offsetCalPending) return;
+  offsetCalPending = false;
+  offsetCalConfirmed = false;
+  offsetCalSampling = false;
+  offsetCalSampleCount = 0;
+  Serial.println("Offset calibration canceled");
 }
 
-void processRecalibrationWorkflow() {
-  if (!recalPending || !recalConfirmed) return;
+void processOffsetCalibrationWorkflow() {
+  if (!offsetCalPending || !offsetCalConfirmed) return;
 
   const unsigned long now = millis();
-  if (!recalSampling) {
-    const float dr = fabsf(roll_phys - recalRefRoll);
-    const float dp = fabsf(pitch_phys - recalRefPitch);
+  if (!offsetCalSampling) {
+    const float dr = fabsf(roll_phys - offsetCalRefRoll);
+    const float dp = fabsf(pitch_phys - offsetCalRefPitch);
     if (dr > modeMotionThreshDeg || dp > modeMotionThreshDeg) {
-      recalStartMs = now;
-      recalRefRoll = roll_phys;
-      recalRefPitch = pitch_phys;
+      offsetCalStartMs = now;
+      offsetCalRefRoll = roll_phys;
+      offsetCalRefPitch = pitch_phys;
       return;
     }
-    if ((now - recalStartMs) >= modeStillMs) {
-      recalSampling = true;
-      recalSampleCount = 0;
-      recalSumAx = recalSumAy = recalSumAz = 0.0f;
-      recalSumGx = recalSumGy = 0.0f;
-      Serial.println("Recalibration sampling...");
+    if ((now - offsetCalStartMs) >= modeStillMs) {
+      offsetCalSampling = true;
+      offsetCalSampleCount = 0;
+      offsetCalSumAx = offsetCalSumAy = offsetCalSumAz = 0.0f;
+      offsetCalSumGx = offsetCalSumGy = 0.0f;
+      Serial.println("Offset calibration sampling...");
     }
     return;
   }
 
-  recalSumAx += lastRawAx;
-  recalSumAy += lastRawAy;
-  recalSumAz += lastRawAz;
-  recalSumGx += lastRawGx;
-  recalSumGy += lastRawGy;
-  recalSampleCount++;
+  offsetCalSumAx += lastRawAx;
+  offsetCalSumAy += lastRawAy;
+  offsetCalSumAz += lastRawAz;
+  offsetCalSumGx += lastRawGx;
+  offsetCalSumGy += lastRawGy;
+  offsetCalSampleCount++;
 
-  if (recalSampleCount < recalSampleTarget) return;
+  if (offsetCalSampleCount < offsetCalSampleTarget) return;
 
-  ax_off = recalSumAx / (float)recalSampleTarget;
-  ay_off = recalSumAy / (float)recalSampleTarget;
-  az_off = (recalSumAz / (float)recalSampleTarget) - g_ref;
-  gx_off = recalSumGx / (float)recalSampleTarget;
-  gy_off = recalSumGy / (float)recalSampleTarget;
+  ax_off = offsetCalSumAx / (float)offsetCalSampleTarget;
+  ay_off = offsetCalSumAy / (float)offsetCalSampleTarget;
+  az_off = (offsetCalSumAz / (float)offsetCalSampleTarget) - g_ref;
+  gx_off = offsetCalSumGx / (float)offsetCalSampleTarget;
+  gy_off = offsetCalSumGy / (float)offsetCalSampleTarget;
   saveBiasOffsetsToEeprom(orientationMode);
   initializeAngles();
 
-  recalPending = false;
-  recalConfirmed = false;
-  recalSampling = false;
-  recalSampleCount = 0;
-  Serial.println("Recalibration complete");
+  offsetCalPending = false;
+  offsetCalConfirmed = false;
+  offsetCalSampling = false;
+  offsetCalSampleCount = 0;
+  Serial.println("Offset calibration complete");
 }
 
-bool recalibrationWorkflowIsActive(void) {
-  return recalPending;
+bool offsetCalibrationWorkflowIsActive(void) {
+  return offsetCalPending;
 }
 
-bool recalibrationWorkflowIsConfirmed(void) {
-  return recalConfirmed;
+bool offsetCalibrationWorkflowIsConfirmed(void) {
+  return offsetCalConfirmed;
 }
 
-float recalibrationWorkflowRemainingSeconds(void) {
-  if (!recalPending || !recalConfirmed) return 0.0f;
-  if (!recalSampling) {
+float offsetCalibrationWorkflowRemainingSeconds(void) {
+  if (!offsetCalPending || !offsetCalConfirmed) return 0.0f;
+  if (!offsetCalSampling) {
     const unsigned long now = millis();
-    const unsigned long elapsed = now - recalStartMs;
-    if (elapsed >= modeStillMs) return ((float)recalSampleTarget * 0.02f);
-    return ((float)(modeStillMs - elapsed) / 1000.0f) + ((float)recalSampleTarget * 0.02f);
+    const unsigned long elapsed = now - offsetCalStartMs;
+    if (elapsed >= modeStillMs) return ((float)offsetCalSampleTarget * 0.02f);
+    return ((float)(modeStillMs - elapsed) / 1000.0f) + ((float)offsetCalSampleTarget * 0.02f);
   }
-  const int rem = recalSampleTarget - recalSampleCount;
+  const int rem = offsetCalSampleTarget - offsetCalSampleCount;
   if (rem <= 0) return 0.0f;
   return (float)rem * 0.02f;
 }
 
-float recalibrationWorkflowProgressPercent(void) {
-  if (!recalPending || !recalConfirmed) return 0.0f;
-  if (!recalSampling) {
+float offsetCalibrationWorkflowProgressPercent(void) {
+  if (!offsetCalPending || !offsetCalConfirmed) return 0.0f;
+  if (!offsetCalSampling) {
     const unsigned long now = millis();
-    const unsigned long elapsed = now - recalStartMs;
+    const unsigned long elapsed = now - offsetCalStartMs;
     if (elapsed >= modeStillMs) return 40.0f;
     return 40.0f * ((float)elapsed / (float)modeStillMs);
   }
-  float frac = (float)recalSampleCount / (float)recalSampleTarget;
+  float frac = (float)offsetCalSampleCount / (float)offsetCalSampleTarget;
   if (frac > 1.0f) frac = 1.0f;
   return 40.0f + 60.0f * frac;
 }
@@ -1170,6 +1355,50 @@ void toggleMeasurementFreeze() {
 
 bool measurementIsFrozen(void) {
   return freezeActive;
+}
+
+float rollConditionPercent(void) {
+  return rollConditionPct;
+}
+
+bool rollConditionIsLow(void) {
+  return rollConditionLowFlag;
+}
+
+void getImuDiagnosticsSample(ImuDiagnosticsSample *out_sample) {
+  if (!out_sample) return;
+  out_sample->valid = lastSensorDataValid;
+  out_sample->sens_ax = lastSensorData.accelX;
+  out_sample->sens_ay = lastSensorData.accelY;
+  out_sample->sens_az = lastSensorData.accelZ;
+  out_sample->sens_gx = lastSensorData.gyroX;
+  out_sample->sens_gy = lastSensorData.gyroY;
+  out_sample->sens_gz = lastSensorData.gyroZ;
+  out_sample->map_ax = lastRawAx;
+  out_sample->map_ay = lastRawAy;
+  out_sample->map_az = lastRawAz;
+  out_sample->map_gx = lastRawGx;
+  out_sample->map_gy = lastRawGy;
+  out_sample->corr_ax = lastCorrAx;
+  out_sample->corr_ay = lastCorrAy;
+  out_sample->corr_az = lastCorrAz;
+  out_sample->corr_gx = lastCorrGx;
+  out_sample->corr_gy = lastCorrGy;
+  out_sample->angle_roll = roll_phys;
+  out_sample->angle_pitch = pitch_phys;
+}
+
+void getCalibrationStateSnapshot(CalibrationStateSnapshot *out_snapshot) {
+  if (!out_snapshot) return;
+  out_snapshot->bias_ax = ax_off;
+  out_snapshot->bias_ay = ay_off;
+  out_snapshot->bias_az = az_off;
+  out_snapshot->bias_gx = gx_off;
+  out_snapshot->bias_gy = gy_off;
+  out_snapshot->zero_roll = roll_zero;
+  out_snapshot->zero_pitch = pitch_zero;
+  out_snapshot->align_roll = align_roll;
+  out_snapshot->align_pitch = align_pitch;
 }
 
 bool bootHoldIsActive(void) {
@@ -1262,15 +1491,15 @@ void handleBootButton() {
         } else {
           zeroWorkflowConfirm();
         }
-      } else if (recalibrationWorkflowIsActive()) {
+      } else if (offsetCalibrationWorkflowIsActive()) {
         if (pressMs >= bootBtnLongPressMs) {
-          recalibrationWorkflowCancel();
+          offsetCalibrationWorkflowCancel();
         } else {
-          recalibrationWorkflowConfirm();
+          offsetCalibrationWorkflowConfirm();
         }
       } else {
         if (pressMs >= bootBtnUltraLongPressMs) {
-          recalibrationWorkflowStart();
+          offsetCalibrationWorkflowStart();
         } else if (pressMs >= bootBtnVeryLongPressMs) {
           modeWorkflowStartToggle();
         } else if (pressMs >= bootBtnLongPressMs) {
