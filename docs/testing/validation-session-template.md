@@ -28,6 +28,9 @@ Workflow:
 - Checklist used: `docs/testing/hardware-validation-checklist.md`
 - Tests executed:
 - Optional deep check executed (`Yes`/`No`):
+- STA/hostname coverage executed (`Yes`/`No`):
+- OTA upload coverage executed (`Yes`/`No`):
+- Battery telemetry/charging coverage executed (`Yes`/`No`):
 
 ## Results Summary
 
@@ -62,3 +65,4 @@ For each issue, add one entry:
 - Serial logs:
 - Media links:
 - Related commit(s):
+- OTA artifact used (`.bin` name/version):

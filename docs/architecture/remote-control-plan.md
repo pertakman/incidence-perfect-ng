@@ -65,7 +65,8 @@ This avoids behavior drift and keeps workflows synchronized.
 
 - Store Wi-Fi settings in `Preferences` (NVS), not EEPROM blocks already used by your calibration/settings.
 - mDNS hostname in STA mode:
-  - `incidence-perfect-ng.local`
+  - user-configurable hostname per unit (for example `shop-jig-a.local`, `shop-jig-b.local`)
+  - default can still be device-derived (chip suffix) if user does not customize
 - AP defaults:
   - SSID: `IncidencePerfectNG-<chipid4>`
   - WPA2 password (configurable)
@@ -119,7 +120,7 @@ Acceptance:
 
 - Add STA credential storage (NVS).
 - Add onboarding page for SSID/password.
-- Add mDNS hostname support (`incidence-perfect-ng.local`).
+- Add mDNS hostname support with user-editable per-device hostname.
 - Add AP fallback if STA fails.
 
 Acceptance:

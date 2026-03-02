@@ -45,6 +45,7 @@ Use this checklist against the current firmware build to establish a known-good 
 | T25 | In normal mode ACTION long press (~1.2s) | Triggers `AXIS` cycle |  |  |
 | T26 | In normal mode ACTION very long press (~2.2s) | Toggles orientation mode |  |  |
 | T27 | In normal mode ACTION ultra long press (~3.2s) | Starts guided OFFSET CAL workflow |  |  |
+| T27b | In normal mode ACTION super long press (~5.0s) | Device enters deep sleep and wakes on ACTION press/reboot |  |  |
 | T28 | In guided ZERO use ACTION short press | Acts as `CONFIRM` |  |  |
 | T29 | In guided ZERO use ACTION long press | Acts as `CANCEL` |  |  |
 | T30 | In guided OFFSET CAL use ACTION short press | Acts as `CONFIRM` |  |  |
@@ -57,6 +58,14 @@ Use this checklist against the current firmware build to establish a known-good 
 | T37 | Send `h` in serial monitor | Help prints and live stream pauses |  |  |
 | T38 | After T37 press `Enter` (or send `g`) | Live stream resumes (`Roll/Pitch` lines continue) |  |  |
 | T39 | Open web diagnostics panel | Raw/remapped/corrected values and refs update live without UI disconnect |  |  |
+| T40 | Open web `Network` panel, set STA credentials + custom hostname + save | Device attempts STA while keeping AP fallback |  |  |
+| T41 | With valid LAN credentials, wait for connect | Device gets STA IP and is reachable via `http://<hostname>.local` |  |  |
+| T42 | Power cycle after T41 | Device reconnects to saved STA network and hostname persists |  |  |
+| T43 | Upload firmware `.bin` via web `OTA Update` panel | Upload completes; device reboots and comes back with expected FW |  |  |
+| T44 | Force STA failure (wrong SSID or AP offline) | AP fallback remains available for recovery/config edits |  |  |
+| T45 | Observe battery line in device UI and web UI | Shows battery percent + voltage (or `BAT --` if unavailable) |  |  |
+| T46 | Connect/disconnect charger power while monitoring UI/web | Charging indication (`CHG`) appears when charging is detected and clears when charging stops |  |  |
+| T47 | Disconnect battery pack while USB power remains connected | Battery line switches to `BAT?` (inferred no-pack state) after stabilization window, and web/API reports `battery_present=false` |  |  |
 
 ## Optional Deep Check (Serial Alignment Flow)
 
@@ -72,5 +81,5 @@ Expected:
 
 ## Exit Criteria for Baseline Complete
 
-- T01-T39 pass.
+- T01-T47 pass.
 - Any failures are captured with reproducible steps and serial output snippets.

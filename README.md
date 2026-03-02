@@ -99,6 +99,7 @@ Touch UI, serial, ACTION button, and web share the same ZERO/OFFSET CAL/ALIGN st
   - In normal mode long press (~1.2s): cycle axis (`BOTH -> ROLL -> PITCH`)
   - In normal mode very long press (~2.2s): toggle orientation (`SCREEN UP` <-> `SCREEN VERTICAL`)
   - In normal mode ultra long press (~3.2s): start OFFSET CAL workflow
+  - In normal mode super long press (~5.0s): enter deep sleep (wake with ACTION press)
   - While holding in normal mode, an on-screen hint shows the release action and countdown to the next action threshold.
 - Touch readout area:
   - Tap the roll/pitch value area to toggle freeze (`LIVE` <-> `FROZEN`)
@@ -109,9 +110,9 @@ Touch UI, serial, ACTION button, and web share the same ZERO/OFFSET CAL/ALIGN st
   - `MODE` is immediate (loads mode-specific calibration/zero settings from EEPROM).
   - OFFSET CAL is guided (`CONFIRM`/`CANCEL`, stillness timer + progress bar).
 
-## Remote Control (Phase A)
+## Remote Control (AP + STA + OTA)
 
-Phone remote control is now available through a device-hosted web UI over Wi-Fi AP mode.
+Phone remote control is available through a device-hosted web UI.
 
 How to connect:
 1. Power the device.
@@ -123,6 +124,7 @@ How to connect:
 
 Available in Phase A:
 - Live readout (`ROLL`, `PITCH`, status line mirror)
+- Battery telemetry on both device and web (`BAT %`, voltage, charging hint)
 - Remote actions:
   - `ZERO`
   - `AXIS`
@@ -143,21 +145,58 @@ Available in Phase A:
 - Diagnostics panel:
   - expandable diagnostics card with raw/remapped/corrected IMU values
   - live offset/zero/alignment references and workflow flags
+- Network panel:
+  - switch between `AP only` and `STA with AP fallback`
+  - set STA SSID/password
+  - set custom hostname (`<your-hostname>.local`) for multi-unit deployments
+- OTA panel:
+  - upload firmware `.bin` from browser and apply update
 - Workflow sync is shared across touch, serial, ACTION button, and web.
 
+OTA update quick steps:
+1. Build firmware for OTA artifact:
+   - `pio run -e esp32s3`
+2. Use the generated file:
+   - `.pio/build/esp32s3/firmware.bin`
+3. Open web UI and expand `OTA Update`.
+4. Select the `.bin` file and click `Upload & Install`.
+5. Wait for reboot, then reconnect and verify reported firmware version.
+
+Important OTA note:
+- OTA updates only the app image.
+- If bootloader/partition layout changes, do one USB flash first.
+
+Web refresh tuning (current):
+- Live angles (`/api/live`): every `120 ms` (~8.3 Hz)
+- Workflow + diagnostics (`/api/state`): every `600 ms` (~1.7 Hz)
+- Network status (`/api/network`): every `3000 ms`
+
 API endpoints:
+- `GET /api/live` (fast live payload for roll/pitch/status updates)
 - `GET /api/state`
 - `POST /api/cmd` with JSON body:
   - `{"cmd":"zero"|"axis"|"freeze"|"rotate"}`
   - `{"cmd":"offset_cal"|"confirm"|"cancel"}` (`zero`/`offset_cal` open guided workflows; `confirm`/`cancel` act on active workflow)
   - `{"cmd":"mode_toggle"|"mode_up"|"mode_vertical"}`
   - `{"cmd":"align_start"|"capture"|"cancel"}`
+- `GET /api/network` (network config + runtime status)
+- `POST /api/network` (`mode`, `ssid`, `password`, `hostname`)
+- `POST /api/ota/upload` (multipart firmware upload)
 - `GET /health`
 
 State payload highlights (`GET /api/state`):
 - Main: roll/pitch, orientation, axis, rotation, live/frozen
+- Battery: `battery_valid`, `battery_voltage_v`, `battery_soc_pct`, `battery_charging`, `battery_charging_inferred`, `battery_present`, `battery_present_inferred`
 - Workflow: zero/mode/offset-cal/align active + progress
+- Network: active mode (`AP`/`STA`/fallback), AP+STA addresses, hostname/`hostname.local`
+- OTA: upload-in-progress flag
 - Diagnostics: sensor raw/remapped/corrected values, conditioning %, bias/zero/align refs
+
+Battery implementation note:
+- Voltage/SOC telemetry is read from the board battery ADC path (`GPIO1`).
+- Charging state is currently inferred from voltage trend (`battery_charging_inferred=true`) unless a dedicated charger-status GPIO is identified and wired in firmware.
+- Firmware also includes a conservative "likely no battery pack connected" heuristic (`battery_present=false`, `battery_present_inferred=true`) for USB-powered cases where the BAT rail is still high.
+- If this heuristic causes false positives on your hardware/use-case, disable it by setting `batteryPresenceHeuristicEnabled=false` in `src/inclinometer.cpp`.
 
 ### `c` vs `C`
 
@@ -197,6 +236,7 @@ Examples:
 - Source files are in `src/` (standard PlatformIO layout).
 - LVGL config lives at `config/lvgl/lv_conf.h` and is wired via build flags in `platformio.ini`.
 - Hardware setup notes and reference image are under `docs/hardware/`.
+- Third-party hardware bundle provenance/checksums are tracked in `docs/hardware/SOURCES.md`.
 - Splash screen design assets are under `docs/assets/splash-screens/`.
 - Splash generation pipeline:
   - script: `scripts/generate_splash.ps1`
@@ -243,13 +283,18 @@ Examples:
 2. UX and control polish
 - Status: Partial
 - Remaining:
-  - Tune ACTION hold thresholds from real usage (`~1.2s / ~2.2s / ~3.2s`).
+  - Tune ACTION hold thresholds from real usage (`~1.2s / ~2.2s / ~3.2s / ~5.0s`).
 
 3. Connectivity exploration
 - Status: Partial
 - Remaining:
   - STA mode + hostname (`.local`) onboarding.
   - Auth hardening and network test matrix.
+  - Deep-sleep wake/power optimization follow-up:
+    - keep `EXT0` as default for stability
+    - evaluate `EXT1` again only with external pull-up on ACTION/`GPIO0` -> `3.3V`
+    - start with `47k`, then test `22k`/`10k` if needed
+    - re-verify both auto-wake behavior and measured sleep current
 - Plan document:
   - `docs/architecture/remote-control-plan.md`
 

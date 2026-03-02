@@ -19,6 +19,10 @@
   - axis view (`BOTH`, `ROLL`, `PITCH`)
   - rotation (`ROT 0` or `ROT 180`)
   - live state (`LIVE` or `FROZEN`)
+- **Top-right battery label** shows:
+  - `BAT <percent>% <voltage> V`
+  - `BAT? <percent>% <voltage> V` when firmware suspects USB rail without battery pack
+  - a steady charge icon when charging is detected
 - **Readouts**:
   - `ROLL` (left) and `PITCH` (right) in degrees
   - colors shift for large angles (warning, then critical)
@@ -76,6 +80,7 @@ In normal measurement mode:
 - **Long press (~1.2s)**: cycle `AXIS` (`BOTH -> ROLL -> PITCH`)
 - **Very long press (~2.2s)**: toggle `MODE` (`SCREEN UP` <-> `SCREEN VERTICAL`)
 - **Ultra long press (~3.2s)**: start guided `OFFSET CAL` workflow
+- **Super long press (~5.0s)**: enter deep sleep (press ACTION to wake)
 
 While holding the ACTION button, an on-screen hint shows what will happen on release and a progress indicator for the next threshold.
 Countdowns are shown as `X.X s` (with a space before `s`).
@@ -191,6 +196,7 @@ Use your phone browser as a remote panel:
 What you get in web UI:
 
 - Live `ROLL`/`PITCH` readout with the same status line as the device.
+- Battery status (`BAT/CHG`, percent, and voltage).
 - Normal controls: `ZERO`, `AXIS`, `FREEZE`, `ROTATE`, `OFFSET CAL`, `MODE`, `ALIGN`.
 - Context controls only when needed:
   - `CONFIRM`/`CANCEL` during guided `ZERO` and `OFFSET CAL`
@@ -205,6 +211,37 @@ What you get in web UI:
   - corrected vectors
   - physics angles + conditioning
   - calibration references (bias/zero/align)
+
+### OTA Update from Web UI
+
+You can update firmware over Wi-Fi from the web page:
+
+1. Open the device web UI (`http://192.168.4.1` in AP mode, or its STA IP/hostname).
+2. Expand `OTA Update`.
+3. Select a firmware `.bin` built for this device/environment.
+4. Tap `Upload & Install`.
+5. Wait for the reboot message, then reconnect and verify firmware version.
+
+If you build firmware from source, the default artifact path is:
+
+- `.pio/build/esp32s3/firmware.bin`
+
+Important:
+
+- OTA updates only the firmware app image.
+- If bootloader or partition layout changes, update once over USB first.
+
+Battery note:
+
+- Current charging state is inferred from battery-voltage trend in firmware.
+- The web/API exposes this via `battery_charging_inferred`.
+- Battery-pack presence is best-effort on this hardware; when firmware suspects "USB powered, no pack", web/API reports `battery_present=false` with `battery_present_inferred=true`.
+
+### Web Refresh Behavior (Current)
+
+- Live angles refresh about every `120 ms`.
+- Workflow state and diagnostics refresh about every `600 ms`.
+- Network status refreshes every `3000 ms`.
 
 Important:
 
