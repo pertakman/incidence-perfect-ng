@@ -21,7 +21,11 @@ Some materials in this repository are third-party references and are **not** re-
 
 Those materials remain under their original licenses/terms from their respective owners.
 
+Repository practice:
+
+- Third-party vendor binaries are kept out of Git when possible.
+- Use `docs/hardware/SOURCES.md` for provenance links + checksums.
+
 ## Trademarks
 
 Any product names, vendor names, and logos referenced in this repository are the property of their respective owners.
-

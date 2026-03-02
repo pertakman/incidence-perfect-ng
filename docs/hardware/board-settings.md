@@ -3,6 +3,7 @@
 This folder keeps reference hardware/tool settings used during bring-up.
 
 - `board-settings-arduino-ide.jpg`: screenshot of Arduino IDE board configuration known to work with this hardware.
+- `SOURCES.md`: provenance + checksums for third-party vendor bundles/manuals kept outside Git.
 
 ## Extracted Settings From Screenshot
 

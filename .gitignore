@@ -15,6 +15,7 @@
 *.bak
 Thumbs.db
 .DS_Store
+tmp/
 
 # Local toolchain downloads (manual PDF pipeline)
 tools/
@@ -25,3 +26,12 @@ docs/manual/dist/
 # Local hardware bundles (keep out of GitHub)
 docs/hardware/*.zip
 docs/hardware/*.rar
+docs/hardware/*.pdf
+docs/hardware/*.stp
+docs/hardware/*.step
+
+# Curated splash assets only (keep one canonical source + one device-rendered PNG)
+docs/assets/splash-screens/*.png
+!docs/assets/splash-screens/splash_screen_OLED_optimized_4.png
+docs/assets/splash-screens/device/*.png
+!docs/assets/splash-screens/device/splash_screen_OLED_optimized_4_536x240.png

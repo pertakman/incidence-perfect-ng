@@ -1,20 +1,14 @@
 # Splash Screens
 
-Candidate splash screen PNG assets for boot/version overlay work.
+Canonical splash assets for firmware/manual generation.
 
-Files:
-- `splash_screen_1.png`
-- `splash_screen_2.png`
-- `splash_screen_monochrome.png`
-- `splash_screen_OLED_optimized.png`
-- `splash_screen_OLED_optimized_4.png`
-- `splash_screen_pixel_grid.png`
-- `splash_screen_ultra_minimal.png`
-- `splash_screen_variants.png`
+Tracked files:
+- `splash_screen_OLED_optimized_4.png` (canonical source image)
+- `device/splash_screen_OLED_optimized_4_536x240.png` (device-sized generated output)
 
 Notes:
-- Keep these as source/design assets.
-- Firmware integration can later choose one base image and render version text (`YYYY.M.X`) on top.
+- Additional exploratory variants should stay outside Git (or in local ignored paths).
+- Firmware integration renders version text (`YYYY.M.X`) on top during boot.
 
 ## Generation Pipeline
 
