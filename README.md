@@ -159,12 +159,21 @@ OTA update quick steps:
 2. Use the generated file:
    - `.pio/build/esp32s3/firmware.bin`
 3. Open web UI and expand `OTA Update`.
-4. Select the `.bin` file and click `Upload & Install`.
-5. Wait for reboot, then reconnect and verify reported firmware version.
+4. Select the `.bin` file.
+5. Enter target version (`YYYY.M.X`) and verify SHA-256 (auto-computed in browser).
+6. Click `Upload & Install`.
+7. Wait for reboot, then reconnect and verify reported firmware version.
+
+If browser SHA-256 auto-calc is unavailable, compute hash locally and paste it:
+- PowerShell:
+  - `Get-FileHash .\.pio\build\esp32s3\firmware.bin -Algorithm SHA256 | Select-Object -ExpandProperty Hash`
 
 Important OTA note:
 - OTA updates only the app image.
 - If bootloader/partition layout changes, do one USB flash first.
+- OTA safety gates now reject uploads when:
+  - target version is not newer than current version (unless `force` is enabled),
+  - SHA-256 does not match the uploaded file.
 
 Web refresh tuning (current):
 - Live angles (`/api/live`): every `120 ms` (~8.3 Hz)
@@ -181,8 +190,13 @@ API endpoints:
   - `{"cmd":"align_start"|"capture"|"cancel"}`
 - `GET /api/network` (network config + runtime status)
 - `POST /api/network` (`mode`, `ssid`, `password`, `hostname`)
-- `POST /api/ota/upload` (multipart firmware upload)
+- `POST /api/network/recover` (`wipe=1` clears saved STA creds and forces AP-only mode)
+- `POST /api/ota/upload?version=YYYY.M.X&sha256=<64hex>&force=0|1` (multipart firmware upload)
 - `GET /health`
+
+Recovery note:
+- Physical recovery uses ACTION/`GPIO0` during firmware startup (hold continuously after reboot for about `2 s`).
+- Avoid holding ACTION before power-on/reset because `GPIO0` is also a boot-strap pin.
 
 State payload highlights (`GET /api/state`):
 - Main: roll/pitch, orientation, axis, rotation, live/frozen
@@ -309,11 +323,11 @@ Examples:
     - evaluate whether legacy `theta` adds practical value for target use-cases
 
 5. OTA update exploration (installation-base maintenance)
-- Status: New
+- Status: In progress
 - Remaining:
-  - Evaluate OTA approach on ESP32-S3 (`HTTPUpdate`/web-triggered flow vs `ArduinoOTA`).
-  - Define OTA safety requirements (version gating, integrity check, interrupted-update behavior).
-  - Add OTA validation matrix (success/failure paths, bad package, network loss, power-loss during update).
+  - Add OTA validation matrix coverage for safety gates (checksum mismatch, stale version reject, force mode).
+  - Add signed-manifest verification (beyond checksum) if threat model requires it.
+  - Add interrupted-update behavior verification (network loss, power-loss during update).
 
 ## Completed Milestones
 

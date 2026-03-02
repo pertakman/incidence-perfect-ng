@@ -219,8 +219,16 @@ You can update firmware over Wi-Fi from the web page:
 1. Open the device web UI (`http://192.168.4.1` in AP mode, or its STA IP/hostname).
 2. Expand `OTA Update`.
 3. Select a firmware `.bin` built for this device/environment.
-4. Tap `Upload & Install`.
-5. Wait for the reboot message, then reconnect and verify firmware version.
+4. Enter the target firmware version (`YYYY.M.X`).
+5. Verify SHA-256 (auto-computed in browser).
+6. Tap `Upload & Install`.
+7. Wait for the reboot message, then reconnect and verify firmware version.
+
+If browser SHA-256 auto-calc is unavailable, compute hash locally and paste it:
+
+```powershell
+Get-FileHash .\.pio\build\esp32s3\firmware.bin -Algorithm SHA256 | Select-Object -ExpandProperty Hash
+```
 
 If you build firmware from source, the default artifact path is:
 
@@ -230,6 +238,17 @@ Important:
 
 - OTA updates only the firmware app image.
 - If bootloader or partition layout changes, update once over USB first.
+- OTA safety gates reject packages when:
+  - target version is not newer than current version (unless `force` is enabled),
+  - uploaded file hash does not match the provided SHA-256.
+
+### Network Recovery
+
+- In the web `Network` panel, use `Recover AP Mode` to force AP-only and clear saved STA credentials.
+- Physical fallback:
+  - reboot device, then immediately press+hold ACTION (`GPIO0`) continuously through startup for ~2 s
+  - do not hold ACTION before power-on/reset, because `GPIO0` is a boot-strap pin
+  - this applies the same AP recovery defaults (AP-only + cleared STA credentials)
 
 Battery note:
 

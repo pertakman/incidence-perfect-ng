@@ -68,6 +68,10 @@ Use this checklist against the current firmware build to establish a known-good 
 | T47 | Disconnect battery pack while USB power remains connected | Best-effort: battery line may switch to `BAT?` after stabilization window; if it remains `BAT/CHG`, record as known limitation for this hardware and continue |  |  |
 | T48 | From normal mode enter deep sleep via ACTION super long press, then wake via ACTION | Touch works after wake (UI taps/buttons respond without reboot) |  |  |
 | T49 | Repeat T48 and observe boot UX | Splash screen appears after wake and firmware version overlay is visible |  |  |
+| T50 | OTA upload with target version equal/older than running FW (`force` unchecked) | OTA is rejected by version gate; running firmware stays unchanged |  |  |
+| T51 | OTA upload with intentionally wrong SHA-256 | OTA is rejected by checksum gate; running firmware stays unchanged |  |  |
+| T52 | In web `Network` panel trigger `Recover AP Mode` | Device switches to AP-only, STA credentials are cleared, AP remains reachable |  |  |
+| T53 | Reboot device, then immediately press+hold ACTION continuously through startup for ~2 s (do not hold before power-on) | Boot-time network recovery applies AP-only defaults and STA credentials are cleared |  |  |
 
 ## Optional Deep Check (Serial Alignment Flow)
 
@@ -83,5 +87,5 @@ Expected:
 
 ## Exit Criteria for Baseline Complete
 
-- T01-T49 pass.
+- T01-T53 pass.
 - Any failures are captured with reproducible steps and serial output snippets.

@@ -30,6 +30,8 @@ Workflow:
 - Optional deep check executed (`Yes`/`No`):
 - STA/hostname coverage executed (`Yes`/`No`):
 - OTA upload coverage executed (`Yes`/`No`):
+- OTA safety-gate coverage executed (`Yes`/`No`):
+- Network recovery coverage executed (`Yes`/`No`):
 - Battery telemetry/charging coverage executed (`Yes`/`No`):
 - Deep-sleep wake coverage executed (`Yes`/`No`):
 - Wake splash/touch regression checks executed (`Yes`/`No`):

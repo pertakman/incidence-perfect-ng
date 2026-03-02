@@ -5,6 +5,8 @@
 #include <Preferences.h>
 #include <ESPmDNS.h>
 #include <Update.h>
+#include <ctype.h>
+#include <mbedtls/sha256.h>
 #include <string.h>
 
 #include "fw_version.h"
@@ -22,9 +24,12 @@ constexpr const char *kPrefsMode = "mode";
 constexpr const char *kPrefsSsid = "sta_ssid";
 constexpr const char *kPrefsPass = "sta_pass";
 constexpr const char *kPrefsHost = "host";
+constexpr int kActionButtonPin = 0;
 
 constexpr unsigned long kStaConnectTimeoutMs = 12000UL;
 constexpr unsigned long kStaRetryIntervalMs = 30000UL;
+constexpr unsigned long kNetworkRecoveryHoldMs = 1800UL;
+constexpr unsigned long kNetworkRecoveryEntryGuardMs = 250UL;
 
 enum NetworkRunMode {
   RUN_AP_ONLY = 0,
@@ -50,7 +55,15 @@ unsigned long next_sta_retry_ms = 0;
 
 bool ota_upload_ok = false;
 bool ota_upload_in_progress = false;
-char ota_error[96] = {0};
+char ota_error[160] = {0};
+bool ota_force_install = false;
+bool ota_sha_ctx_active = false;
+bool ota_expected_sha256_set = false;
+char ota_expected_sha256[65] = {0};
+char ota_computed_sha256[65] = {0};
+char ota_requested_version[24] = {0};
+size_t ota_written_bytes = 0;
+mbedtls_sha256_context ota_sha_ctx;
 
 // Keep large response buffers off the request-handler stack to avoid
 // stack pressure/reset loops when the web page polls rapidly.
@@ -95,6 +108,7 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
       border: 1px solid #31406f; border-radius: 8px;
       background: #0d1733; color: #eef4ff; padding: 10px;
     }
+    input[type="checkbox"] { width: auto; padding: 0; }
     label { display: block; }
     #msg { min-height: 18px; color: #8cf0c6; margin-top: 8px; }
     .hidden { display: none; }
@@ -211,14 +225,31 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
     </div>
     <div class="row" style="margin-top:10px;">
       <button id="netSaveBtn" onclick="saveNetwork()">Save Network</button>
+      <button id="netRecoverBtn" onclick="recoverNetwork()">Recover AP Mode</button>
     </div>
     <div id="netMsg" class="muted" style="margin-top:8px;"></div>
   </details>
 
   <details class="card">
     <summary>OTA Update</summary>
-    <p class="diag-note">Upload a firmware `.bin` built for this board/environment.</p>
+    <p class="diag-note">Upload a firmware `.bin` built for this board/environment. Version and SHA-256 are required.</p>
     <input id="otaFile" type="file" accept=".bin">
+    <div class="row" style="margin-top:8px;">
+      <label style="flex:1; min-width:180px;">
+        <div class="muted" style="margin:0 0 4px 0;">Target version</div>
+        <input id="otaVersion" type="text" placeholder="2026.3.8">
+      </label>
+    </div>
+    <div class="row" style="margin-top:8px;">
+      <label style="flex:1; min-width:180px;">
+        <div class="muted" style="margin:0 0 4px 0;">SHA-256 (auto-calculated)</div>
+        <input id="otaSha256" type="text" placeholder="64 hex chars" maxlength="64">
+      </label>
+    </div>
+    <label class="muted" style="display:flex; align-items:center; gap:8px; margin-top:6px;">
+      <input id="otaForce" type="checkbox">
+      Allow reinstall/downgrade for service scenarios
+    </label>
     <div class="bar"><div id="otaProgressBar"></div></div>
     <div class="row" style="margin-top:10px;">
       <button id="otaBtn" onclick="uploadOta()">Upload & Install</button>
@@ -290,8 +321,12 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
     const netSsidEl = document.getElementById('netSsid');
     const netPasswordEl = document.getElementById('netPassword');
     const netSaveBtn = document.getElementById('netSaveBtn');
+    const netRecoverBtn = document.getElementById('netRecoverBtn');
     const netMsgEl = document.getElementById('netMsg');
     const otaFileEl = document.getElementById('otaFile');
+    const otaVersionEl = document.getElementById('otaVersion');
+    const otaSha256El = document.getElementById('otaSha256');
+    const otaForceEl = document.getElementById('otaForce');
     const otaBtnEl = document.getElementById('otaBtn');
     const otaProgressBarEl = document.getElementById('otaProgressBar');
     const otaMsgEl = document.getElementById('otaMsg');
@@ -316,6 +351,7 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
     [netModeEl, netHostnameEl, netSsidEl, netPasswordEl].forEach((el) => {
       el.addEventListener('input', () => { networkFormDirty = true; });
     });
+    otaFileEl.addEventListener('change', onOtaFileSelected);
 
     function fmt(v) {
       const n = Number(v);
@@ -443,7 +479,12 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
       pitchEl.textContent = fmt(s.pitch);
       setAngleClass(rollEl, s.roll);
       setAngleClass(pitchEl, s.pitch);
-      if (s.fw) fwEl.textContent = s.fw;
+      if (s.fw) {
+        fwEl.textContent = s.fw;
+        if (!otaVersionEl.value.trim()) {
+          otaVersionEl.value = String(s.fw);
+        }
+      }
       const batteryKnown = !!s.battery_valid;
       const batteryPresent = (s.battery_present !== false);
       const batteryPresentInferred = !!s.battery_present_inferred;
@@ -592,12 +633,112 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
       setTimeout(refreshLive, 120);
     }
 
-    function uploadOta() {
+    async function recoverNetwork() {
+      if (!confirm('Reset to AP-only mode and clear saved STA credentials?')) return;
+      netRecoverBtn.disabled = true;
+      netMsgEl.textContent = 'Applying AP recovery mode...';
+      try {
+        const body = new URLSearchParams();
+        body.set('wipe', '1');
+        const r = await fetch('/api/network/recover', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: body.toString()
+        });
+        const out = await r.json();
+        if (out.ok) {
+          networkFormDirty = false;
+          netPasswordEl.value = '';
+          netMsgEl.textContent = 'AP recovery mode enabled. STA credentials cleared.';
+        } else {
+          netMsgEl.textContent = `Recovery failed: ${out.error || 'unknown error'}`;
+        }
+      } catch (e) {
+        netMsgEl.textContent = 'Recovery request failed.';
+      } finally {
+        netRecoverBtn.disabled = false;
+      }
+      setTimeout(refreshNetwork, 120);
+      setTimeout(refreshState, 120);
+      setTimeout(refreshLive, 120);
+    }
+
+    function inferVersionFromFilename(name) {
+      const m = String(name || '').match(/(\d{4}\.\d+\.\d+)/);
+      return m ? m[1] : '';
+    }
+
+    async function computeSha256Hex(file) {
+      if (!window.crypto || !window.crypto.subtle) {
+        throw new Error('This browser does not support WebCrypto SHA-256');
+      }
+      const buf = await file.arrayBuffer();
+      const hash = await crypto.subtle.digest('SHA-256', buf);
+      const bytes = new Uint8Array(hash);
+      let hex = '';
+      for (let i = 0; i < bytes.length; i += 1) {
+        hex += bytes[i].toString(16).padStart(2, '0');
+      }
+      return hex;
+    }
+
+    async function onOtaFileSelected() {
+      const file = otaFileEl.files && otaFileEl.files[0];
+      otaSha256El.value = '';
+      if (!file) return;
+
+      if (!otaVersionEl.value.trim()) {
+        const inferred = inferVersionFromFilename(file.name);
+        if (inferred) otaVersionEl.value = inferred;
+      }
+
+      if (!window.crypto || !window.crypto.subtle) {
+        otaMsgEl.textContent = 'WebCrypto SHA-256 unavailable. Paste SHA-256 manually (PowerShell: Get-FileHash -Algorithm SHA256).';
+        return;
+      }
+
+      otaMsgEl.textContent = 'Calculating SHA-256...';
+      otaProgressBarEl.style.width = '0%';
+      try {
+        const sha = await computeSha256Hex(file);
+        otaSha256El.value = sha;
+        otaMsgEl.textContent = 'SHA-256 ready.';
+      } catch (e) {
+        otaSha256El.value = '';
+        otaMsgEl.textContent = `Checksum error: ${e.message || 'failed to compute SHA-256'}`;
+      }
+    }
+
+    async function uploadOta() {
       const file = otaFileEl.files && otaFileEl.files[0];
       if (!file) {
         otaMsgEl.textContent = 'Select a firmware .bin file first.';
         return;
       }
+
+      const version = otaVersionEl.value.trim();
+      if (!/^\d{4}\.\d+\.\d+$/.test(version)) {
+        otaMsgEl.textContent = 'Enter firmware version in format YYYY.M.X (for example 2026.3.8).';
+        return;
+      }
+
+      let sha256 = otaSha256El.value.trim().toLowerCase();
+      if (!/^[0-9a-f]{64}$/.test(sha256)) {
+        if (!window.crypto || !window.crypto.subtle) {
+          otaMsgEl.textContent = 'This browser/context cannot compute SHA-256. Paste a 64-char SHA-256 first.';
+          return;
+        }
+        otaMsgEl.textContent = 'Calculating SHA-256 before upload...';
+        try {
+          sha256 = await computeSha256Hex(file);
+          otaSha256El.value = sha256;
+        } catch (e) {
+          otaMsgEl.textContent = `Checksum error: ${e.message || 'failed to compute SHA-256'}`;
+          return;
+        }
+      }
+
+      const force = !!otaForceEl.checked;
 
       otaBtnEl.disabled = true;
       otaMsgEl.textContent = 'Uploading firmware...';
@@ -607,7 +748,8 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
       form.append('firmware', file, file.name);
 
       const xhr = new XMLHttpRequest();
-      xhr.open('POST', '/api/ota/upload');
+      const uploadUrl = `/api/ota/upload?version=${encodeURIComponent(version)}&sha256=${encodeURIComponent(sha256)}&force=${force ? '1' : '0'}`;
+      xhr.open('POST', uploadUrl);
       xhr.upload.onprogress = (e) => {
         if (!e.lengthComputable || e.total <= 0) return;
         const pct = Math.max(0, Math.min(100, Math.round((e.loaded * 100) / e.total)));
@@ -738,6 +880,120 @@ void sanitize_hostname(const String &raw, char *dst, size_t dst_size) {
   if (len == 0) {
     copy_cstr(dst, dst_size, fallback);
   }
+}
+
+bool parse_bool_flag(const String &raw) {
+  String s = raw;
+  s.trim();
+  s.toLowerCase();
+  return (s == "1" || s == "true" || s == "yes" || s == "on");
+}
+
+bool normalize_sha256_hex(const String &raw, char *dst, size_t dst_size) {
+  if (!dst || dst_size < 65) return false;
+  String s = raw;
+  s.trim();
+  s.toLowerCase();
+  if (s.length() != 64) return false;
+  for (int i = 0; i < 64; ++i) {
+    const char c = s[i];
+    const bool hex = (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
+    if (!hex) return false;
+    dst[i] = c;
+  }
+  dst[64] = '\0';
+  return true;
+}
+
+bool parse_version_triplet(const char *src, int &year, int &minor, int &patch) {
+  if (!src || src[0] == '\0') return false;
+  const char *p = src;
+
+  auto parse_uint = [&](int &out) -> bool {
+    if (!isdigit((unsigned char)*p)) return false;
+    long v = 0;
+    while (isdigit((unsigned char)*p)) {
+      v = (v * 10L) + (long)(*p - '0');
+      if (v > 99999L) return false;
+      ++p;
+    }
+    out = (int)v;
+    return true;
+  };
+
+  if (!parse_uint(year)) return false;
+  if (*p != '.') return false;
+  ++p;
+  if (!parse_uint(minor)) return false;
+  if (*p != '.') return false;
+  ++p;
+  if (!parse_uint(patch)) return false;
+  return true; // allow optional suffix after numeric triplet
+}
+
+int compare_version_triplet(const char *lhs, const char *rhs, bool *ok = nullptr) {
+  int ly = 0, lm = 0, lp = 0;
+  int ry = 0, rm = 0, rp = 0;
+  const bool lhs_ok = parse_version_triplet(lhs, ly, lm, lp);
+  const bool rhs_ok = parse_version_triplet(rhs, ry, rm, rp);
+  if (!lhs_ok || !rhs_ok) {
+    if (ok) *ok = false;
+    return 0;
+  }
+  if (ok) *ok = true;
+  if (ly != ry) return (ly > ry) ? 1 : -1;
+  if (lm != rm) return (lm > rm) ? 1 : -1;
+  if (lp != rp) return (lp > rp) ? 1 : -1;
+  return 0;
+}
+
+void bytes_to_hex_lower(const uint8_t *bytes, size_t bytes_len, char *dst, size_t dst_size) {
+  static const char hex[] = "0123456789abcdef";
+  if (!dst || dst_size == 0) return;
+  if (!bytes || dst_size < (bytes_len * 2 + 1)) {
+    dst[0] = '\0';
+    return;
+  }
+  size_t j = 0;
+  for (size_t i = 0; i < bytes_len; ++i) {
+    dst[j++] = hex[(bytes[i] >> 4) & 0x0F];
+    dst[j++] = hex[bytes[i] & 0x0F];
+  }
+  dst[j] = '\0';
+}
+
+void apply_network_recovery_defaults(bool clear_sta_credentials) {
+  net_cfg.prefer_sta = false;
+  if (clear_sta_credentials) {
+    net_cfg.sta_ssid[0] = '\0';
+    net_cfg.sta_password[0] = '\0';
+  }
+}
+
+bool action_button_network_recovery_requested() {
+  pinMode(kActionButtonPin, INPUT_PULLUP);
+  if (digitalRead(kActionButtonPin) != LOW) return false;
+
+  // Recovery intent is "hold ACTION from reboot for ~1.8 s".
+  // setup_remote_control() runs after splash/init, so only require the
+  // remaining hold time relative to boot uptime, plus a short entry guard
+  // to avoid accidental edge-triggering.
+  const unsigned long now_ms = millis();
+  const unsigned long remaining_from_boot_ms =
+    (now_ms >= kNetworkRecoveryHoldMs) ? 0UL : (kNetworkRecoveryHoldMs - now_ms);
+  const unsigned long required_hold_ms =
+    (remaining_from_boot_ms > kNetworkRecoveryEntryGuardMs)
+      ? remaining_from_boot_ms
+      : kNetworkRecoveryEntryGuardMs;
+
+  const unsigned long t0 = millis();
+  while ((millis() - t0) < required_hold_ms) {
+    if (digitalRead(kActionButtonPin) != LOW) {
+      return false;
+    }
+    delay(10);
+  }
+  return true;
 }
 
 const char *network_run_mode_text() {
@@ -925,7 +1181,11 @@ void on_sta_connect_failed(const char *reason) {
   net_run_mode = RUN_AP_FALLBACK;
 
   WiFi.disconnect(false, false);
-  start_access_point(true, false);
+  if (!start_access_point(true, false)) {
+    // Last-ditch attempt: drop STA and insist on AP so recovery remains reachable.
+    start_access_point(false, true);
+    net_run_mode = RUN_AP_ONLY;
+  }
   next_sta_retry_ms = millis() + kStaRetryIntervalMs;
 
   Serial.print("[remote] STA connect failed: ");
@@ -940,7 +1200,9 @@ void switch_to_ap_only_mode() {
   sta_connected = false;
   stop_mdns_if_active();
   WiFi.disconnect(false, false);
-  start_access_point(false, true);
+  if (!start_access_point(false, true)) {
+    Serial.println("[remote] AP-only recovery failed to start AP");
+  }
   net_run_mode = RUN_AP_ONLY;
 }
 
@@ -951,7 +1213,11 @@ void apply_network_config() {
   }
 
   net_run_mode = RUN_AP_FALLBACK;
-  start_access_point(true, true);
+  if (!start_access_point(true, true)) {
+    Serial.println("[remote] AP fallback failed to start; forcing AP-only recovery");
+    switch_to_ap_only_mode();
+    return;
+  }
   next_sta_retry_ms = millis();
   sta_attempt_active = false;
   sta_connected = false;
@@ -961,6 +1227,16 @@ void apply_network_config() {
 void loop_network_manager() {
   if (!net_cfg.prefer_sta || net_cfg.sta_ssid[0] == '\0') {
     return;
+  }
+
+  if (!sta_connected && !ap_active) {
+    // Keep local recovery path alive while STA is pending/unavailable.
+    if (!start_access_point(true, false)) {
+      start_access_point(false, false);
+      net_run_mode = RUN_AP_ONLY;
+    } else {
+      net_run_mode = RUN_AP_FALLBACK;
+    }
   }
 
   const wl_status_t status = WiFi.status();
@@ -1398,13 +1674,90 @@ void handle_network_post() {
   send_network_state_json(true, "");
 }
 
+void handle_network_recover_post() {
+  const String wipe_in = get_request_value("wipe");
+  const bool wipe_sta_credentials = (wipe_in.length() == 0) ? true : parse_bool_flag(wipe_in);
+  const String host_in = get_request_value("hostname");
+
+  apply_network_recovery_defaults(wipe_sta_credentials);
+  if (host_in.length() > 0 || server.hasArg("hostname")) {
+    sanitize_hostname(host_in, net_cfg.hostname, sizeof(net_cfg.hostname));
+  }
+
+  if (!save_network_config()) {
+    send_network_state_json(false, "failed to persist recovery config", 500);
+    return;
+  }
+
+  switch_to_ap_only_mode();
+  send_network_state_json(true, "");
+}
+
+void reset_ota_upload_session_state() {
+  ota_upload_ok = false;
+  ota_upload_in_progress = false;
+  ota_error[0] = '\0';
+  ota_force_install = false;
+  ota_expected_sha256_set = false;
+  ota_expected_sha256[0] = '\0';
+  ota_computed_sha256[0] = '\0';
+  ota_requested_version[0] = '\0';
+  ota_written_bytes = 0;
+  if (ota_sha_ctx_active) {
+    mbedtls_sha256_free(&ota_sha_ctx);
+    ota_sha_ctx_active = false;
+  }
+}
+
 void handle_ota_upload_data() {
   HTTPUpload &upload = server.upload();
   switch (upload.status) {
     case UPLOAD_FILE_START: {
+      reset_ota_upload_session_state();
       ota_upload_in_progress = true;
-      ota_upload_ok = false;
-      ota_error[0] = '\0';
+
+      String version_in = server.arg("version");
+      String sha_in = server.arg("sha256");
+      String force_in = server.arg("force");
+      ota_force_install = parse_bool_flag(force_in);
+
+      copy_cstr(ota_requested_version, sizeof(ota_requested_version), version_in.c_str());
+      int target_year = 0;
+      int target_minor = 0;
+      int target_patch = 0;
+      if (!parse_version_triplet(ota_requested_version, target_year, target_minor, target_patch)) {
+        snprintf(ota_error, sizeof(ota_error), "missing/invalid version (YYYY.M.X). Reload UI and provide version+sha256.");
+        break;
+      }
+      (void)target_year;
+      (void)target_minor;
+      (void)target_patch;
+
+      bool cmp_ok = false;
+      const int cmp = compare_version_triplet(ota_requested_version, FW_VERSION, &cmp_ok);
+      if (!cmp_ok) {
+        snprintf(ota_error, sizeof(ota_error), "version gate unavailable (current or target parse failed)");
+        break;
+      }
+      if (cmp <= 0 && !ota_force_install) {
+        snprintf(ota_error, sizeof(ota_error), "version gate rejected: target %s is not newer than current %s", ota_requested_version, FW_VERSION);
+        break;
+      }
+
+      ota_expected_sha256_set = normalize_sha256_hex(sha_in, ota_expected_sha256, sizeof(ota_expected_sha256));
+      if (!ota_expected_sha256_set) {
+        snprintf(ota_error, sizeof(ota_error), "missing/invalid sha256 (64 hex). Reload UI and provide version+sha256.");
+        break;
+      }
+
+      mbedtls_sha256_init(&ota_sha_ctx);
+      if (mbedtls_sha256_starts_ret(&ota_sha_ctx, 0) != 0) {
+        snprintf(ota_error, sizeof(ota_error), "sha256 init failed");
+        mbedtls_sha256_free(&ota_sha_ctx);
+        break;
+      }
+      ota_sha_ctx_active = true;
+
       if (!Update.begin(UPDATE_SIZE_UNKNOWN, U_FLASH)) {
         snprintf(ota_error, sizeof(ota_error), "Update.begin failed");
       }
@@ -1412,27 +1765,66 @@ void handle_ota_upload_data() {
     }
     case UPLOAD_FILE_WRITE: {
       if (ota_error[0] != '\0') break;
-      if (Update.write(upload.buf, upload.currentSize) != upload.currentSize) {
+      const size_t written = Update.write(upload.buf, upload.currentSize);
+      if (written != upload.currentSize) {
         snprintf(ota_error, sizeof(ota_error), "Update.write failed");
+        break;
+      }
+      ota_written_bytes += written;
+      if (ota_sha_ctx_active) {
+        if (mbedtls_sha256_update_ret(&ota_sha_ctx, upload.buf, upload.currentSize) != 0) {
+          snprintf(ota_error, sizeof(ota_error), "sha256 update failed");
+        }
       }
       break;
     }
     case UPLOAD_FILE_END: {
+      if (ota_error[0] == '\0' && ota_written_bytes == 0) {
+        snprintf(ota_error, sizeof(ota_error), "no firmware payload received");
+      }
+
+      if (ota_error[0] == '\0' && ota_sha_ctx_active) {
+        uint8_t digest[32] = {0};
+        if (mbedtls_sha256_finish_ret(&ota_sha_ctx, digest) != 0) {
+          snprintf(ota_error, sizeof(ota_error), "sha256 finish failed");
+        } else {
+          bytes_to_hex_lower(digest, sizeof(digest), ota_computed_sha256, sizeof(ota_computed_sha256));
+          if (strcmp(ota_computed_sha256, ota_expected_sha256) != 0) {
+            snprintf(ota_error, sizeof(ota_error), "sha256 mismatch");
+          }
+        }
+      }
+
+      if (ota_sha_ctx_active) {
+        mbedtls_sha256_free(&ota_sha_ctx);
+        ota_sha_ctx_active = false;
+      }
+
       if (ota_error[0] == '\0') {
         if (Update.end(true)) {
           ota_upload_ok = true;
         } else {
           snprintf(ota_error, sizeof(ota_error), "Update.end failed");
         }
+      } else {
+        if (Update.isRunning()) {
+          Update.abort();
+        }
       }
       ota_upload_in_progress = false;
       break;
     }
     case UPLOAD_FILE_ABORTED: {
-      Update.abort();
+      if (Update.isRunning()) {
+        Update.abort();
+      }
+      if (ota_sha_ctx_active) {
+        mbedtls_sha256_free(&ota_sha_ctx);
+        ota_sha_ctx_active = false;
+      }
+      snprintf(ota_error, sizeof(ota_error), "Upload aborted");
       ota_upload_in_progress = false;
       ota_upload_ok = false;
-      snprintf(ota_error, sizeof(ota_error), "Upload aborted");
       break;
     }
     default:
@@ -1478,6 +1870,15 @@ void handle_health() {
 void setup_remote_control(void) {
   build_default_ap_ssid();
   load_network_config();
+
+  if (action_button_network_recovery_requested()) {
+    Serial.println("[remote] ACTION held at boot -> forcing AP recovery defaults");
+    apply_network_recovery_defaults(true);
+    if (!save_network_config()) {
+      Serial.println("[remote] failed to persist AP recovery defaults");
+    }
+  }
+
   apply_network_config();
 
   server.on("/", HTTP_GET, handle_root);
@@ -1487,6 +1888,8 @@ void setup_remote_control(void) {
   server.on("/api/network", HTTP_OPTIONS, handle_options);
   server.on("/api/network", HTTP_GET, handle_network_get);
   server.on("/api/network", HTTP_POST, handle_network_post);
+  server.on("/api/network/recover", HTTP_OPTIONS, handle_options);
+  server.on("/api/network/recover", HTTP_POST, handle_network_recover_post);
   server.on("/api/cmd", HTTP_OPTIONS, handle_options);
   server.on("/api/cmd", HTTP_POST, handle_cmd);
   server.on("/api/cmd", HTTP_GET, handle_cmd);
