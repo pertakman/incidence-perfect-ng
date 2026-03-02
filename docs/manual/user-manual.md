@@ -190,6 +190,7 @@ Use your phone browser as a remote panel:
 
 1. Connect to the device AP:
    - SSID: `IncidencePerfectNG-XXXX`
+   - `XXXX` is derived from the board's Wi-Fi MAC identity and should differ between units.
    - Password: `incidence-ng`
 2. Open `http://192.168.4.1`.
 
@@ -363,7 +364,6 @@ When reporting an issue, include:
 For reference bring-up settings (Arduino IDE), see:
 
 - `../hardware/board-settings.md`
-- `../hardware/board-settings-arduino-ide.jpg`
 
 ---
 

@@ -22,7 +22,8 @@ This matches your requirement to avoid app-store dependency and still support LA
 - The hardware manual/index also contains `WIFI_STA` and `WIFI_AP` sections.
 
 Reference source bundles:
-- `docs/hardware/20241201211113ESP32-S3-AMOLED-1.91.rar`
+- local vendor workspace (not in Git):
+  - `C:\dev\ESP32-S3-AMOLED-1.91\...`
 - extracted paths inside vendor demo zip:
   - `ESP32-S3-AMOLED-1.91-Demo/Arduino/examples/WIFI_AP/WIFI_AP.ino`
   - `ESP32-S3-AMOLED-1.91-Demo/Arduino/examples/WIFI_STA/WIFI_STA.ino`
@@ -68,7 +69,8 @@ This avoids behavior drift and keeps workflows synchronized.
   - user-configurable hostname per unit (for example `shop-jig-a.local`, `shop-jig-b.local`)
   - default can still be device-derived (chip suffix) if user does not customize
 - AP defaults:
-  - SSID: `IncidencePerfectNG-<chipid4>`
+  - SSID: `IncidencePerfectNG-<suffix4>`
+  - `suffix4` derived from board-unique STA MAC identity (hashed), to avoid same suffix across devices
   - WPA2 password (configurable)
 
 ## 5) Security Baseline
