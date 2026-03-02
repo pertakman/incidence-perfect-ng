@@ -31,6 +31,8 @@ Workflow:
 - STA/hostname coverage executed (`Yes`/`No`):
 - OTA upload coverage executed (`Yes`/`No`):
 - Battery telemetry/charging coverage executed (`Yes`/`No`):
+- Deep-sleep wake coverage executed (`Yes`/`No`):
+- Wake splash/touch regression checks executed (`Yes`/`No`):
 
 ## Results Summary
 

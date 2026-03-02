@@ -31,7 +31,7 @@ static const unsigned long touchRecoverIntervalMs = 250;
 // I2C HELPERS (Arduino Wire)
 // ============================================================
 
-static uint8_t I2C_writr_buff(uint8_t addr, uint8_t reg, uint8_t *buf, uint8_t len)
+static uint8_t I2C_write_buff(uint8_t addr, uint8_t reg, uint8_t *buf, uint8_t len)
 {
   Wire.beginTransmission(addr);
   Wire.write(reg);
@@ -80,13 +80,13 @@ static bool touchWakeAndConfigure(void)
   // Best-effort wake from hibernate for variants that implement power mode.
   // Ignore errors so variants without this register still proceed.
   uint8_t power = FT3168_POWER_ACTIVE;
-  (void)I2C_writr_buff(I2C_ADDR_FT3168, FT3168_REG_POWER_MODE, &power, 1);
+  (void)I2C_write_buff(I2C_ADDR_FT3168, FT3168_REG_POWER_MODE, &power, 1);
   delay(2);
 
   // Keep bring-up compatible across controller variants. Consider either
   // configure-write success or probe success as "reachable".
   uint8_t data = 0x00;
-  const bool cfg_ok = (I2C_writr_buff(I2C_ADDR_FT3168, FT3168_REG_DEVICE_MODE, &data, 1) == 0);
+  const bool cfg_ok = (I2C_write_buff(I2C_ADDR_FT3168, FT3168_REG_DEVICE_MODE, &data, 1) == 0);
   delay(3);
 
   uint8_t points = 0;
@@ -102,7 +102,7 @@ static bool touchWakeAndConfigure(void)
 
   // Some parts need a longer wake settle after hibernate.
   delay(25);
-  (void)I2C_writr_buff(I2C_ADDR_FT3168, FT3168_REG_POWER_MODE, &power, 1);
+  (void)I2C_write_buff(I2C_ADDR_FT3168, FT3168_REG_POWER_MODE, &power, 1);
   delay(4);
   return I2C_read_buff(I2C_ADDR_FT3168, FT3168_REG_POINTS, &points, 1) == 0;
 }
@@ -186,10 +186,10 @@ bool Touch_Sleep(void)
 {
   // Prefer hibernate for lower sleep current; fall back to monitor if needed.
   uint8_t data = touchSleepPreferHibernate ? FT3168_POWER_HIBERNATE : FT3168_POWER_MONITOR;
-  bool ok = I2C_writr_buff(I2C_ADDR_FT3168, FT3168_REG_POWER_MODE, &data, 1) == 0;
+  bool ok = I2C_write_buff(I2C_ADDR_FT3168, FT3168_REG_POWER_MODE, &data, 1) == 0;
   if (!ok && touchSleepPreferHibernate) {
     data = FT3168_POWER_MONITOR;
-    ok = I2C_writr_buff(I2C_ADDR_FT3168, FT3168_REG_POWER_MODE, &data, 1) == 0;
+    ok = I2C_write_buff(I2C_ADDR_FT3168, FT3168_REG_POWER_MODE, &data, 1) == 0;
   }
   if (ok) {
     touchReady = false;

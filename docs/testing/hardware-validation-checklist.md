@@ -12,7 +12,7 @@ Use this checklist against the current firmware build to establish a known-good 
 
 ## Known Current UI Limitations
 
-- None currently tracked as blocking for beta.
+- Battery no-pack detection (`BAT?`) is heuristic on this board and may not trigger in all USB-only scenarios.
 
 ## Test Cases
 
@@ -65,7 +65,9 @@ Use this checklist against the current firmware build to establish a known-good 
 | T44 | Force STA failure (wrong SSID or AP offline) | AP fallback remains available for recovery/config edits |  |  |
 | T45 | Observe battery line in device UI and web UI | Shows battery percent + voltage (or `BAT --` if unavailable) |  |  |
 | T46 | Connect/disconnect charger power while monitoring UI/web | Charging indication (`CHG`) appears when charging is detected and clears when charging stops |  |  |
-| T47 | Disconnect battery pack while USB power remains connected | Battery line switches to `BAT?` (inferred no-pack state) after stabilization window, and web/API reports `battery_present=false` |  |  |
+| T47 | Disconnect battery pack while USB power remains connected | Best-effort: battery line may switch to `BAT?` after stabilization window; if it remains `BAT/CHG`, record as known limitation for this hardware and continue |  |  |
+| T48 | From normal mode enter deep sleep via ACTION super long press, then wake via ACTION | Touch works after wake (UI taps/buttons respond without reboot) |  |  |
+| T49 | Repeat T48 and observe boot UX | Splash screen appears after wake and firmware version overlay is visible |  |  |
 
 ## Optional Deep Check (Serial Alignment Flow)
 
@@ -81,5 +83,5 @@ Expected:
 
 ## Exit Criteria for Baseline Complete
 
-- T01-T47 pass.
+- T01-T49 pass.
 - Any failures are captured with reproducible steps and serial output snippets.

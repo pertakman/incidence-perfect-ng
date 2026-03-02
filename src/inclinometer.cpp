@@ -199,6 +199,9 @@ static const float batteryNoBatteryPlateauDeltaV = 0.0035f;
 static const float batteryPresenceRecoverDeltaV = 0.010f;
 // Calibrated against DMM at full charge so UI reads 4.2 V at top-of-charge.
 static const float batteryVoltageScaleCal = 1.0550f;
+static const unsigned long deepSleepPreEntryDelayMs = 20;
+static const unsigned long deepSleepSerialFlushDelayMs = 60;
+static const unsigned long touchWakeInitDelayMs = 160;
 
 enum AlignmentStep {
   ALIGN_SCREEN_UP = 0,
@@ -488,7 +491,7 @@ void enterDeepSleep() {
   }
   Wire.end();
   displayPrepareForDeepSleep();
-  delay(20);
+  delay(deepSleepPreEntryDelayMs);
 
   esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_ALL);
   esp_err_t wakeErr = ESP_OK;
@@ -531,7 +534,7 @@ void enterDeepSleep() {
   waitForActionReleaseStable();
   Serial.println("Entering deep sleep. Press ACTION (GPIO0) to wake.");
   Serial.flush();
-  delay(60);
+  delay(deepSleepSerialFlushDelayMs);
   esp_deep_sleep_start();
 }
 
@@ -553,7 +556,7 @@ void setup_inclinometer() {
       wakeCause == ESP_SLEEP_WAKEUP_EXT1 ||
       wakeCause == ESP_SLEEP_WAKEUP_GPIO) {
     // Give touch controller time to exit deep-sleep power state before init.
-    delay(160);
+    delay(touchWakeInitDelayMs);
   }
   // Re-init touch after shared I2C bus setup to ensure touch recovers post-wake.
   Touch_Init();

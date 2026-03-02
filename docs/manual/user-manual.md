@@ -236,6 +236,7 @@ Battery note:
 - Current charging state is inferred from battery-voltage trend in firmware.
 - The web/API exposes this via `battery_charging_inferred`.
 - Battery-pack presence is best-effort on this hardware; when firmware suspects "USB powered, no pack", web/API reports `battery_present=false` with `battery_present_inferred=true`.
+- On some board/charger combinations, no-pack detection may stay at `BAT/CHG` even with battery disconnected (shared rail behavior).
 
 ### Web Refresh Behavior (Current)
 

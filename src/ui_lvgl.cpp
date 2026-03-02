@@ -64,6 +64,15 @@ static lv_color_t *buf2;
 static lv_disp_t *disp_handle = nullptr;
 static bool splash_deferred_until_first_loop = false;
 static uint32_t splash_deferred_due_ms = 0;
+static const uint32_t splashShowDurationMs = 1500;
+static const uint32_t splashDeferredDelayMs = 450;
+static const uint32_t panelDeepSleepResetLowMs = 35;
+static const uint32_t panelDeepSleepResetHighSettleMs = 220;
+static const uint32_t panelWakeSettleMs = 120;
+static const uint32_t panelColdSettleMs = 30;
+static const uint32_t panelWakeSplashPreDelayMs = 20;
+static const uint32_t panelDeepSleepBeginRetryDelayMs = 80;
+static const uint32_t panelDeepSleepBeginRetryCount = 5;
 
 static void show_startup_splash()
 {
@@ -85,7 +94,7 @@ static void show_startup_splash()
   gfx->setCursor(text_x, text_y);
   gfx->print(FW_VERSION);
 
-  delay(1500);
+  delay(splashShowDurationMs);
 }
 
 // ============================================================
@@ -1151,28 +1160,28 @@ void setup_display()
     // Hard-reset the panel before begin() to make splash rendering deterministic.
     pinMode(LCD_RST, OUTPUT);
     digitalWrite(LCD_RST, LOW);
-    delay(35);
+    delay(panelDeepSleepResetLowMs);
     digitalWrite(LCD_RST, HIGH);
-    delay(220);
+    delay(panelDeepSleepResetHighSettleMs);
   }
 
   bool ok = false;
-  for (int i = 0; i < 5 && !ok; i++) {
+  for (uint32_t i = 0; i < panelDeepSleepBeginRetryCount && !ok; i++) {
     ok = gfx->begin();
     if (!ok) {
-      delay(80);
+      delay(panelDeepSleepBeginRetryDelayMs);
     }
   }
   if (ok) {
     gfx->displayOn();
-    delay(woke_from_deep_sleep ? 120 : 30);
+    delay(woke_from_deep_sleep ? panelWakeSettleMs : panelColdSettleMs);
     // Clear once so first splash frame is not dropped on sleepy panel state.
     gfx->fillScreen(0x0000);
     delay(10);
     if (woke_from_deep_sleep) {
       // Defer wake splash until loop phase, after panel and LVGL are fully settled.
       splash_deferred_until_first_loop = true;
-      splash_deferred_due_ms = millis() + 450;
+      splash_deferred_due_ms = millis() + splashDeferredDelayMs;
     } else {
       show_startup_splash();
     }
@@ -1242,7 +1251,7 @@ void loop_display()
 
   if (splash_deferred_until_first_loop && gfx && (int32_t)(now - splash_deferred_due_ms) >= 0) {
     gfx->displayOn();
-    delay(20);
+    delay(panelWakeSplashPreDelayMs);
     show_startup_splash();
     splash_deferred_until_first_loop = false;
     const uint32_t t = millis();
