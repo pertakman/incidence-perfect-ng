@@ -1,0 +1,21 @@
+{
+  "version": "2026.3.9-beta1",
+  "date": "2026-03-02",
+  "source_commit": "290297f",
+  "platformio_env": "esp32s3",
+  "artifact": {
+    "path": ".pio/build/esp32s3/firmware.bin",
+    "sha256": "7B5046BB2F199384592D863781BF95EAC530D9509A768F9BE12FCAD87C65436E",
+    "bytes": 1486800
+  },
+  "validation": {
+    "session_log": "docs/testing/session-logs/2026-03-02-validation-session.md",
+    "tests_passed": [
+      "T50",
+      "T51",
+      "T52",
+      "T53"
+    ]
+  }
+}
+
