@@ -801,6 +801,31 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
 </html>
 )HTML";
 
+uint16_t board_suffix_from_mac() {
+  uint8_t mac[6] = {0};
+  esp_read_mac(mac, ESP_MAC_WIFI_STA);
+
+  // FNV-1a over full MAC gives a stable per-board suffix and avoids
+  // endianness pitfalls from masking ESP.getEfuseMac().
+  uint32_t hash = 2166136261u;
+  for (int i = 0; i < 6; ++i) {
+    hash ^= (uint32_t)mac[i];
+    hash *= 16777619u;
+  }
+  return (uint16_t)(hash & 0xFFFFu);
+}
+
+void log_board_identity() {
+  uint8_t mac[6] = {0};
+  esp_read_mac(mac, ESP_MAC_WIFI_STA);
+  const uint16_t suffix = board_suffix_from_mac();
+  Serial.print("[remote] STA MAC: ");
+  Serial.printf("%02X:%02X:%02X:%02X:%02X:%02X\n",
+    mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+  Serial.print("[remote] Board suffix: ");
+  Serial.printf("%04X\n", suffix);
+}
+
 const char *orientation_text() {
   return (orientationMode == MODE_SCREEN_VERTICAL) ? "SCREEN VERTICAL" : "SCREEN UP";
 }
@@ -834,14 +859,14 @@ void append_if_room(char *dst, size_t dst_size, char c, size_t &len) {
 }
 
 void build_default_ap_ssid() {
-  uint64_t chip = ESP.getEfuseMac();
-  snprintf(ap_ssid, sizeof(ap_ssid), "IncidencePerfectNG-%04X", (uint16_t)(chip & 0xFFFF));
+  const uint16_t suffix = board_suffix_from_mac();
+  snprintf(ap_ssid, sizeof(ap_ssid), "IncidencePerfectNG-%04X", suffix);
 }
 
 void build_default_hostname(char *dst, size_t dst_size) {
   if (!dst || dst_size == 0) return;
-  uint64_t chip = ESP.getEfuseMac();
-  snprintf(dst, dst_size, "incidence-perfect-ng-%04x", (uint16_t)(chip & 0xFFFF));
+  const uint16_t suffix = board_suffix_from_mac();
+  snprintf(dst, dst_size, "incidence-perfect-ng-%04x", suffix);
 }
 
 void sanitize_hostname(const String &raw, char *dst, size_t dst_size) {
@@ -1049,15 +1074,21 @@ bool load_network_config() {
   net_cfg.prefer_sta = false;
   build_default_hostname(net_cfg.hostname, sizeof(net_cfg.hostname));
 
+  // Ensure namespace exists so later read-only open does not emit NOT_FOUND.
+  Preferences init_prefs;
+  if (init_prefs.begin(kPrefsNs, false)) {
+    init_prefs.end();
+  }
+
   Preferences prefs;
   if (!prefs.begin(kPrefsNs, true)) {
     return false;
   }
 
-  String mode = prefs.getString(kPrefsMode, "ap");
-  String ssid = prefs.getString(kPrefsSsid, "");
-  String pass = prefs.getString(kPrefsPass, "");
-  String host = prefs.getString(kPrefsHost, net_cfg.hostname);
+  String mode = prefs.isKey(kPrefsMode) ? prefs.getString(kPrefsMode) : String("ap");
+  String ssid = prefs.isKey(kPrefsSsid) ? prefs.getString(kPrefsSsid) : String("");
+  String pass = prefs.isKey(kPrefsPass) ? prefs.getString(kPrefsPass) : String("");
+  String host = prefs.isKey(kPrefsHost) ? prefs.getString(kPrefsHost) : String(net_cfg.hostname);
   prefs.end();
 
   mode.toLowerCase();
@@ -1869,6 +1900,7 @@ void handle_health() {
 
 void setup_remote_control(void) {
   build_default_ap_ssid();
+  log_board_identity();
   load_network_config();
 
   if (action_button_network_recovery_requested()) {

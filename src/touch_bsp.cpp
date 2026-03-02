@@ -43,18 +43,13 @@ static uint8_t I2C_write_buff(uint8_t addr, uint8_t reg, uint8_t *buf, uint8_t l
 
 static uint8_t I2C_read_buff(uint8_t addr, uint8_t reg, uint8_t *buf, uint8_t len)
 {
-  // Try repeated-start first.
+  // Use STOP between write/read for better robustness on this board.
+  // Repeated-start can trigger intermittent i2cWriteReadNonStop failures.
   Wire.beginTransmission(addr);
   Wire.write(reg);
-  uint8_t err = Wire.endTransmission(false);
+  uint8_t err = Wire.endTransmission(true);
   if (err != 0) {
-    // Some controller variants are more tolerant with a STOP before read.
-    Wire.beginTransmission(addr);
-    Wire.write(reg);
-    err = Wire.endTransmission(true);
-    if (err != 0) {
-      return err;
-    }
+    return err;
   }
 
   size_t n = Wire.requestFrom((int)addr, (int)len);
