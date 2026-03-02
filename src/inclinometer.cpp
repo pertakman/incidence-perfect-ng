@@ -35,7 +35,11 @@
 #include <EEPROM.h>
 #include <math.h>
 #include <lvgl.h>
+#include <esp_sleep.h>
+#include <driver/rtc_io.h>
 #include "inclinometer_shared.h"
+#include "touch_bsp.h"
+#include "remote_control.h"
 #include "fw_version.h"
 
 // ============================================================
@@ -45,6 +49,7 @@
 #define SDA_PIN 40
 #define SCL_PIN 39
 #define BOOT_BUTTON_PIN 0
+#define BATTERY_ADC_PIN 1
 
 #define EEPROM_SIZE 128
 #define EEPROM_ADDR_MODE       0
@@ -107,10 +112,14 @@ static unsigned long bootBtnLastChangeMs = 0;
 static unsigned long bootBtnPressStartMs = 0;
 static bool bootHoldActive = false;
 static unsigned long bootHoldMs = 0;
+static bool deepSleepPending = false;
+static unsigned long deepSleepPendingSinceMs = 0;
 static const unsigned long bootBtnDebounceMs = 30;
 static const unsigned long bootBtnLongPressMs = 1200;
 static const unsigned long bootBtnVeryLongPressMs = 2200;
 static const unsigned long bootBtnUltraLongPressMs = 3200;
+static const unsigned long bootBtnSleepPressMs = 5000;
+static const unsigned long bootBtnSleepReleaseGuardMs = 250;
 static bool modePending = false;
 static bool modeConfirmed = false;
 static OrientationMode modeTargetState = MODE_SCREEN_UP;
@@ -161,6 +170,35 @@ static unsigned long rawStreamLastMs = 0;
 static float rollConditionPct = 100.0f;
 static bool rollConditionLowFlag = false;
 static bool serialOutputPaused = false;
+static BatteryTelemetry batteryTelemetry = {false, 0.0f, 0.0f, false, false, true, false};
+static bool batteryTelemetryInitialized = false;
+static float batteryFilteredVoltage = 0.0f;
+static float batteryTrendAnchorVoltage = 0.0f;
+static unsigned long batteryLastSampleMs = 0;
+static unsigned long batteryTrendAnchorMs = 0;
+static unsigned long batteryLastChargeRiseMs = 0;
+static bool batteryPresenceLikely = true;
+static bool batteryPresenceInferred = false;
+static bool batteryPresenceSawChargeEvidence = false;
+static bool batteryPresenceSawDischargeEvidence = false;
+static unsigned long batteryNoBatteryCandidateMs = 0;
+static const unsigned long batterySampleIntervalMs = 250;
+static const unsigned long batteryTrendWindowMs = 8000;
+static const unsigned long batteryChargeHoldMs = 90000;
+static const float batteryEmaAlpha = 0.18f;
+static const float batteryChargeDeltaV = 0.018f;
+static const float batteryDischargeDeltaV = -0.012f;
+// EXT1 + RTC_PERIPH=OFF can reduce chip sleep current, but may auto-wake if
+// GPIO0 lacks a strong external pull-up in deep sleep. Keep EXT0 as stable default.
+static const bool deepSleepUseExt1Wake = false;
+// Set false to immediately revert to legacy behavior (always assume battery present).
+static const bool batteryPresenceHeuristicEnabled = true;
+static const unsigned long batteryNoBatteryConfirmMs = 120000;
+static const float batteryNoBatteryMinVoltageV = 4.14f;
+static const float batteryNoBatteryPlateauDeltaV = 0.0035f;
+static const float batteryPresenceRecoverDeltaV = 0.010f;
+// Calibrated against DMM at full charge so UI reads 4.2 V at top-of-charge.
+static const float batteryVoltageScaleCal = 1.0550f;
 
 enum AlignmentStep {
   ALIGN_SCREEN_UP = 0,
@@ -236,9 +274,14 @@ void processModeWorkflow();
 void processAlignmentCapture();
 void processOffsetCalibrationWorkflow();
 void processZeroWorkflow();
+const char *sleepWakeCauseText(esp_sleep_wakeup_cause_t cause);
+void enterDeepSleep();
 void offsetCalibrationWorkflowStart();
 void offsetCalibrationWorkflowConfirm();
 void offsetCalibrationWorkflowCancel();
+void initBatteryTelemetry();
+void updateBatteryTelemetry(unsigned long now_ms);
+float batterySocFromVoltage(float voltage_v);
 
 // ============================================================
 // AXIS REMAPPING  (FROZEN v4.0 BEHAVIOR)
@@ -274,12 +317,231 @@ void remapGyro(const QMI8658_Data& d, float& gx, float& gy) {
   }
 }
 
+float batterySocFromVoltage(float voltage_v) {
+  struct Point {
+    float v;
+    float soc;
+  };
+  static const Point curve[] = {
+    {3.30f, 0.0f},
+    {3.40f, 3.0f},
+    {3.50f, 8.0f},
+    {3.60f, 15.0f},
+    {3.70f, 28.0f},
+    {3.80f, 45.0f},
+    {3.90f, 62.0f},
+    {4.00f, 78.0f},
+    {4.10f, 90.0f},
+    {4.20f, 100.0f}
+  };
+
+  if (voltage_v <= curve[0].v) return curve[0].soc;
+  const int last = (int)(sizeof(curve) / sizeof(curve[0])) - 1;
+  if (voltage_v >= curve[last].v) return curve[last].soc;
+
+  for (int i = 1; i <= last; ++i) {
+    if (voltage_v <= curve[i].v) {
+      const float dv = curve[i].v - curve[i - 1].v;
+      if (dv <= 0.0f) return curve[i].soc;
+      const float t = (voltage_v - curve[i - 1].v) / dv;
+      return curve[i - 1].soc + t * (curve[i].soc - curve[i - 1].soc);
+    }
+  }
+  return 0.0f;
+}
+
+void initBatteryTelemetry() {
+  pinMode(BATTERY_ADC_PIN, INPUT);
+  analogReadResolution(12);
+#if defined(ADC_11db)
+  analogSetPinAttenuation(BATTERY_ADC_PIN, ADC_11db);
+#elif defined(ADC_ATTEN_DB_12)
+  analogSetPinAttenuation(BATTERY_ADC_PIN, ADC_ATTEN_DB_12);
+#endif
+  batteryTelemetry = {false, 0.0f, 0.0f, false, false, true, false};
+  batteryTelemetryInitialized = false;
+  batteryFilteredVoltage = 0.0f;
+  batteryTrendAnchorVoltage = 0.0f;
+  batteryLastSampleMs = 0;
+  batteryTrendAnchorMs = 0;
+  batteryLastChargeRiseMs = 0;
+  batteryPresenceLikely = true;
+  batteryPresenceInferred = false;
+  batteryPresenceSawChargeEvidence = false;
+  batteryPresenceSawDischargeEvidence = false;
+  batteryNoBatteryCandidateMs = 0;
+}
+
+void updateBatteryTelemetry(unsigned long now_ms) {
+  if ((now_ms - batteryLastSampleMs) < batterySampleIntervalMs) return;
+  batteryLastSampleMs = now_ms;
+
+  const int raw = analogRead(BATTERY_ADC_PIN);
+  if (raw < 8 || raw > 4095) {
+    return;
+  }
+
+  // ADC+divider estimate is calibrated against DMM reference.
+  const float raw_voltage = ((float)raw * 3.3f / 4095.0f) * 2.0f * batteryVoltageScaleCal;
+  if (!batteryTelemetryInitialized) {
+    batteryTelemetryInitialized = true;
+    batteryFilteredVoltage = raw_voltage;
+    batteryTrendAnchorVoltage = raw_voltage;
+    batteryTrendAnchorMs = now_ms;
+    batteryLastChargeRiseMs = now_ms;
+  } else {
+    batteryFilteredVoltage += batteryEmaAlpha * (raw_voltage - batteryFilteredVoltage);
+  }
+
+  batteryTelemetry.valid = true;
+  batteryTelemetry.voltage_v = batteryFilteredVoltage;
+  batteryTelemetry.soc_percent = batterySocFromVoltage(batteryFilteredVoltage);
+
+  if ((now_ms - batteryTrendAnchorMs) >= batteryTrendWindowMs) {
+    const float delta_v = batteryFilteredVoltage - batteryTrendAnchorVoltage;
+    const float abs_delta_v = fabsf(delta_v);
+    if (delta_v >= batteryChargeDeltaV) {
+      batteryTelemetry.charging = true;
+      batteryTelemetry.charging_inferred = true;
+      batteryLastChargeRiseMs = now_ms;
+      batteryPresenceSawChargeEvidence = true;
+    } else if (delta_v <= batteryDischargeDeltaV) {
+      batteryTelemetry.charging = false;
+      batteryTelemetry.charging_inferred = true;
+      batteryPresenceSawDischargeEvidence = true;
+    } else if (batteryTelemetry.charging &&
+               (now_ms - batteryLastChargeRiseMs) >= batteryChargeHoldMs) {
+      batteryTelemetry.charging = false;
+      batteryTelemetry.charging_inferred = true;
+    }
+
+    if (batteryPresenceHeuristicEnabled) {
+      const bool no_dynamic_evidence =
+        !batteryPresenceSawChargeEvidence && !batteryPresenceSawDischargeEvidence;
+      const bool plateau = abs_delta_v <= batteryNoBatteryPlateauDeltaV;
+      const bool near_full = batteryFilteredVoltage >= batteryNoBatteryMinVoltageV;
+      const bool candidate_no_battery =
+        no_dynamic_evidence && near_full && plateau && !batteryTelemetry.charging;
+
+      if (candidate_no_battery) {
+        if (batteryNoBatteryCandidateMs == 0) {
+          batteryNoBatteryCandidateMs = now_ms;
+        }
+        if ((now_ms - batteryNoBatteryCandidateMs) >= batteryNoBatteryConfirmMs) {
+          batteryPresenceLikely = false;
+          batteryPresenceInferred = true;
+        }
+      } else {
+        batteryNoBatteryCandidateMs = 0;
+        if (!batteryPresenceLikely) {
+          const bool recovery =
+            batteryTelemetry.charging ||
+            batteryFilteredVoltage < (batteryNoBatteryMinVoltageV - 0.06f) ||
+            abs_delta_v >= batteryPresenceRecoverDeltaV;
+          if (recovery) {
+            batteryPresenceLikely = true;
+            batteryPresenceInferred = true;
+          }
+        }
+      }
+    } else {
+      batteryPresenceLikely = true;
+      batteryPresenceInferred = false;
+      batteryNoBatteryCandidateMs = 0;
+    }
+
+    batteryTrendAnchorVoltage = batteryFilteredVoltage;
+    batteryTrendAnchorMs = now_ms;
+  }
+
+  batteryTelemetry.present = batteryPresenceLikely;
+  batteryTelemetry.present_inferred = batteryPresenceInferred;
+  if (!batteryTelemetry.present) {
+    batteryTelemetry.charging = false;
+  }
+}
+
+static void waitForActionReleaseStable(void) {
+  // EXT0 wake is level-sensitive; if GPIO0 is low at sleep entry, wake can
+  // trigger immediately. Require a brief stable-high release window first.
+  uint8_t stableSamples = 0;
+  while (stableSamples < 20) { // 20 x 5 ms = 100 ms
+    if (digitalRead(BOOT_BUTTON_PIN) == HIGH) {
+      stableSamples++;
+    } else {
+      stableSamples = 0;
+    }
+    delay(5);
+  }
+}
+
+void enterDeepSleep() {
+  waitForActionReleaseStable();
+
+  // Graceful subsystem shutdown before entering deep sleep.
+  prepare_remote_for_deep_sleep();
+  if (!imu.enableSensors(QMI8658_DISABLE_ALL)) {
+    Serial.println("IMU shutdown warning: failed to disable sensors");
+  }
+  if (!Touch_Sleep()) {
+    Serial.println("Touch shutdown warning: sleep command failed");
+  }
+  Wire.end();
+  displayPrepareForDeepSleep();
+  delay(20);
+
+  esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_ALL);
+  esp_err_t wakeErr = ESP_OK;
+  if (deepSleepUseExt1Wake) {
+    pinMode(BOOT_BUTTON_PIN, INPUT_PULLUP);
+    const uint64_t wakeMask = (1ULL << BOOT_BUTTON_PIN);
+    wakeErr = esp_sleep_enable_ext1_wakeup(wakeMask, ESP_EXT1_WAKEUP_ANY_LOW);
+    if (wakeErr == ESP_OK) {
+      const esp_err_t pdErr = esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_OFF);
+      if (pdErr == ESP_OK) {
+        Serial.println("Deep sleep wake: EXT1 ANY_LOW on GPIO0, RTC_PERIPH=OFF");
+      } else {
+        Serial.print("RTC_PERIPH OFF request failed (");
+        Serial.print((int)pdErr);
+        Serial.println("), using default power domain policy");
+      }
+    } else {
+      Serial.print("ext1 wake setup failed (");
+      Serial.print((int)wakeErr);
+      Serial.println("), falling back to ext0 wake");
+    }
+  }
+
+  if (!deepSleepUseExt1Wake || wakeErr != ESP_OK) {
+    rtc_gpio_init((gpio_num_t)BOOT_BUTTON_PIN);
+    rtc_gpio_set_direction((gpio_num_t)BOOT_BUTTON_PIN, RTC_GPIO_MODE_INPUT_ONLY);
+    rtc_gpio_pullup_en((gpio_num_t)BOOT_BUTTON_PIN);
+    rtc_gpio_pulldown_dis((gpio_num_t)BOOT_BUTTON_PIN);
+    wakeErr = esp_sleep_enable_ext0_wakeup((gpio_num_t)BOOT_BUTTON_PIN, 0);
+    if (wakeErr == ESP_OK) {
+      Serial.println("Deep sleep wake: EXT0 LOW on GPIO0");
+    } else {
+      Serial.print("ext0 wake setup failed (");
+      Serial.print((int)wakeErr);
+      Serial.println("), enabling 30 s timer fallback");
+      esp_sleep_enable_timer_wakeup(30ULL * 1000000ULL);
+    }
+  }
+
+  waitForActionReleaseStable();
+  Serial.println("Entering deep sleep. Press ACTION (GPIO0) to wake.");
+  Serial.flush();
+  delay(60);
+  esp_deep_sleep_start();
+}
+
 // ============================================================
 // SETUP
 // ============================================================
 
 void setup_inclinometer() {
   Serial.begin(115200);
+  const esp_sleep_wakeup_cause_t wakeCause = esp_sleep_get_wakeup_cause();
 
   unsigned long t0 = millis();
   while (!Serial && millis() - t0 < 200) {
@@ -287,8 +549,17 @@ void setup_inclinometer() {
   }
 
   Wire.begin(SDA_PIN, SCL_PIN);
+  if (wakeCause == ESP_SLEEP_WAKEUP_EXT0 ||
+      wakeCause == ESP_SLEEP_WAKEUP_EXT1 ||
+      wakeCause == ESP_SLEEP_WAKEUP_GPIO) {
+    // Give touch controller time to exit deep-sleep power state before init.
+    delay(160);
+  }
+  // Re-init touch after shared I2C bus setup to ensure touch recovers post-wake.
+  Touch_Init();
   pinMode(BOOT_BUTTON_PIN, INPUT_PULLUP);
   EEPROM.begin(EEPROM_SIZE);
+  initBatteryTelemetry();
 
   // Restore persisted state
   orientationMode = (OrientationMode)EEPROM.read(EEPROM_ADDR_MODE);
@@ -301,6 +572,10 @@ void setup_inclinometer() {
   Serial.print("\nQMI8658 Inclinometer FW ");
   Serial.println(FW_VERSION);
   Serial.println("ACTION button mapped to GPIO0 (BOOT, active-low)");
+  if (wakeCause != ESP_SLEEP_WAKEUP_UNDEFINED) {
+    Serial.print("Wake cause: ");
+    Serial.println(sleepWakeCauseText(wakeCause));
+  }
 
   // IMU configuration (kept intentionally conservative)
   imu.begin(Wire, QMI8658_ADDRESS_HIGH);
@@ -334,6 +609,19 @@ void setup_inclinometer() {
   serialWasAttached = (bool)Serial;
 
   lastTime = millis();
+}
+
+const char *sleepWakeCauseText(esp_sleep_wakeup_cause_t cause) {
+  switch (cause) {
+    case ESP_SLEEP_WAKEUP_EXT0: return "EXT0 (ACTION button)";
+    case ESP_SLEEP_WAKEUP_EXT1: return "EXT1";
+    case ESP_SLEEP_WAKEUP_TIMER: return "TIMER";
+    case ESP_SLEEP_WAKEUP_TOUCHPAD: return "TOUCHPAD";
+    case ESP_SLEEP_WAKEUP_ULP: return "ULP";
+    case ESP_SLEEP_WAKEUP_GPIO: return "GPIO";
+    case ESP_SLEEP_WAKEUP_UART: return "UART";
+    default: return "UNDEFINED";
+  }
 }
 
 // ============================================================
@@ -421,6 +709,7 @@ void loop_inclinometer() {
   processZeroWorkflow();
   processOffsetCalibrationWorkflow();
   processAlignmentCapture();
+  updateBatteryTelemetry(now);
 
   // Output
   if (!serialOutputPaused && rawStreamEnabled) {
@@ -612,6 +901,34 @@ void printRuntimeStatus() {
     Serial.print(" (LOW near +/-90 pitch)");
   }
   Serial.println();
+  if (batteryTelemetry.valid) {
+    Serial.print("Battery: ");
+    Serial.print(batteryTelemetry.soc_percent, 0);
+    Serial.print("% @ ");
+    Serial.print(batteryTelemetry.voltage_v, 1);
+    Serial.print(" V");
+    if (batteryTelemetry.present_inferred && !batteryTelemetry.present) {
+      Serial.print(" (likely no battery connected; inferred)");
+      Serial.println();
+    } else {
+      if (batteryTelemetry.charging) {
+        Serial.print(" (charging");
+        if (batteryTelemetry.charging_inferred) {
+          Serial.print(", inferred");
+        }
+        Serial.print(")");
+      } else {
+        Serial.print(" (not charging");
+        if (batteryTelemetry.charging_inferred) {
+          Serial.print(", inferred");
+        }
+        Serial.print(")");
+      }
+      Serial.println();
+    }
+  } else {
+    Serial.println("Battery: unavailable");
+  }
   Serial.print("Workflows active: ");
   Serial.print("ZERO=");
   Serial.print(zeroPending ? "Y" : "N");
@@ -1365,6 +1682,17 @@ bool rollConditionIsLow(void) {
   return rollConditionLowFlag;
 }
 
+void getBatteryTelemetry(BatteryTelemetry *out_telemetry) {
+  if (!out_telemetry) return;
+  *out_telemetry = batteryTelemetry;
+}
+
+void requestDeepSleep(void) {
+  deepSleepPending = true;
+  deepSleepPendingSinceMs = millis();
+  Serial.println("Deep sleep requested (remote/API)");
+}
+
 void getImuDiagnosticsSample(ImuDiagnosticsSample *out_sample) {
   if (!out_sample) return;
   out_sample->valid = lastSensorDataValid;
@@ -1498,7 +1826,11 @@ void handleBootButton() {
           offsetCalibrationWorkflowConfirm();
         }
       } else {
-        if (pressMs >= bootBtnUltraLongPressMs) {
+        if (pressMs >= bootBtnSleepPressMs) {
+          deepSleepPending = true;
+          deepSleepPendingSinceMs = now;
+          Serial.println("Deep sleep armed: release guard active");
+        } else if (pressMs >= bootBtnUltraLongPressMs) {
           offsetCalibrationWorkflowStart();
         } else if (pressMs >= bootBtnVeryLongPressMs) {
           modeWorkflowStartToggle();
@@ -1514,5 +1846,14 @@ void handleBootButton() {
   if (bootBtnStablePressed) {
     bootHoldActive = true;
     bootHoldMs = now - bootBtnPressStartMs;
+  }
+
+  if (deepSleepPending) {
+    if (bootBtnStablePressed || bootBtnRawPressed) {
+      deepSleepPendingSinceMs = now;
+    } else if ((now - deepSleepPendingSinceMs) >= bootBtnSleepReleaseGuardMs) {
+      deepSleepPending = false;
+      enterDeepSleep();
+    }
   }
 }

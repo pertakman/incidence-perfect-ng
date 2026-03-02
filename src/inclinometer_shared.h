@@ -57,6 +57,16 @@ struct CalibrationStateSnapshot {
   float align_pitch;
 };
 
+struct BatteryTelemetry {
+  bool valid;
+  float voltage_v;
+  float soc_percent;
+  bool charging;
+  bool charging_inferred;
+  bool present;
+  bool present_inferred;
+};
+
 // Forward declarations used across files
 void setOrientation(OrientationMode m);
 
@@ -75,6 +85,8 @@ void toggleMeasurementFreeze(void);
 bool measurementIsFrozen(void);
 float rollConditionPercent(void);
 bool rollConditionIsLow(void);
+void getBatteryTelemetry(BatteryTelemetry *out_telemetry);
+void requestDeepSleep(void);
 bool bootHoldIsActive(void);
 unsigned long bootHoldDurationMs(void);
 bool modeWorkflowIsActive(void);
@@ -105,3 +117,6 @@ float offsetCalibrationWorkflowRemainingSeconds(void);
 float offsetCalibrationWorkflowProgressPercent(void);
 void getImuDiagnosticsSample(ImuDiagnosticsSample *out_sample);
 void getCalibrationStateSnapshot(CalibrationStateSnapshot *out_snapshot);
+
+// Display power management hooks (implemented in ui_lvgl.cpp)
+void displayPrepareForDeepSleep(void);

@@ -8,6 +8,8 @@
 #include "inclinometer_shared.h"
 #include "fw_version.h"
 #include "splash_image_536x240_rgb565.h"
+#include <esp_sleep.h>
+#include <esp_system.h>
 #include <math.h>
 #include <string.h>
 #include "touch_bsp.h"
@@ -60,6 +62,8 @@ static lv_disp_draw_buf_t draw_buf;
 static lv_color_t *buf1;
 static lv_color_t *buf2;
 static lv_disp_t *disp_handle = nullptr;
+static bool splash_deferred_until_first_loop = false;
+static uint32_t splash_deferred_due_ms = 0;
 
 static void show_startup_splash()
 {
@@ -112,6 +116,8 @@ AxisDisplayMode getAxisMode(void)
 
 // Top status
 static lv_obj_t *label_mode;
+static lv_obj_t *label_battery;
+static lv_obj_t *label_battery_charge;
 static lv_obj_t *label_header;
 static lv_obj_t *boot_hint_box;
 static lv_obj_t *label_boot_hint;
@@ -176,16 +182,60 @@ static void update_status_label()
   static char last[72] = "";
   char buf[72];
   const char *orientation_text =
-    (orientationMode == MODE_SCREEN_VERTICAL) ? "SCREEN VERTICAL" : "SCREEN UP";
-  snprintf(buf, sizeof(buf), "%s | %s | ROT %d | %s%s",
+    (orientationMode == MODE_SCREEN_VERTICAL) ? "VERT" : "UP";
+  snprintf(buf, sizeof(buf), "%s | %s | R%d | %s%s",
            orientation_text,
            axis_mode_text(),
            displayRotated ? 180 : 0,
-           measurementIsFrozen() ? "FROZEN" : "LIVE",
+           measurementIsFrozen() ? "HOLD" : "LIVE",
            rollConditionIsLow() ? " | !" : "");
 
   if (strcmp(buf, last) != 0) {
     lv_label_set_text(label_mode, buf);
+    strncpy(last, buf, sizeof(last) - 1);
+    last[sizeof(last) - 1] = '\0';
+  }
+}
+
+static void update_battery_label()
+{
+  static char last[40] = "";
+  char buf[40];
+
+  BatteryTelemetry battery = {};
+  getBatteryTelemetry(&battery);
+
+  if (!battery.valid) {
+    snprintf(buf, sizeof(buf), "BAT --");
+    lv_obj_set_style_text_color(label_battery, lv_color_hex(0xA0A0A0), 0);
+    lv_obj_add_flag(label_battery_charge, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_align(label_battery, LV_ALIGN_TOP_RIGHT, -4, 6);
+  } else if (battery.present_inferred && !battery.present) {
+    const int soc = (int)lroundf(battery.soc_percent);
+    snprintf(buf, sizeof(buf), "BAT? %d%% %.1f V", soc, battery.voltage_v);
+    lv_obj_set_style_text_color(label_battery, lv_color_hex(0xE6B86A), 0);
+    lv_obj_add_flag(label_battery_charge, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_align(label_battery, LV_ALIGN_TOP_RIGHT, -4, 6);
+  } else {
+    const int soc = (int)lroundf(battery.soc_percent);
+    snprintf(buf, sizeof(buf), "BAT %d%% %.1f V", soc, battery.voltage_v);
+    lv_obj_set_style_text_color(
+      label_battery,
+      battery.charging ? lv_color_hex(0x6FD3FF) : lv_color_hex(0x9BD8A7),
+      0
+    );
+    if (battery.charging) {
+      lv_obj_clear_flag(label_battery_charge, LV_OBJ_FLAG_HIDDEN);
+      lv_obj_align(label_battery_charge, LV_ALIGN_TOP_RIGHT, -4, 6);
+      lv_obj_align_to(label_battery, label_battery_charge, LV_ALIGN_OUT_LEFT_MID, -6, 0);
+    } else {
+      lv_obj_add_flag(label_battery_charge, LV_OBJ_FLAG_HIDDEN);
+      lv_obj_align(label_battery, LV_ALIGN_TOP_RIGHT, -4, 6);
+    }
+  }
+
+  if (strcmp(buf, last) != 0) {
+    lv_label_set_text(label_battery, buf);
     strncpy(last, buf, sizeof(last) - 1);
     last[sizeof(last) - 1] = '\0';
   }
@@ -340,24 +390,30 @@ static void update_boot_hint_label()
     const float to_axis = (hold_ms < 1200) ? countdown_display_seconds((1200 - hold_ms) / 1000.0f) : 0.0f;
     const float to_mode = (hold_ms < 2200) ? countdown_display_seconds((2200 - hold_ms) / 1000.0f) : 0.0f;
     const float to_offset_cal = (hold_ms < 3200) ? countdown_display_seconds((3200 - hold_ms) / 1000.0f) : 0.0f;
+    const float to_sleep = (hold_ms < 5000) ? countdown_display_seconds((5000 - hold_ms) / 1000.0f) : 0.0f;
 
     if (hold_ms < 1200) {
       snprintf(buf, sizeof(buf),
                "Release: FREEZE | AXIS in %.1f s",
                to_axis);
-      progress_pct = (int)((hold_ms * 100UL) / 3200UL);
+      progress_pct = (int)((hold_ms * 100UL) / 5000UL);
     } else if (hold_ms < 2200) {
       snprintf(buf, sizeof(buf),
                "Release: AXIS | MODE in %.1f s",
                to_mode);
-      progress_pct = (int)((hold_ms * 100UL) / 3200UL);
+      progress_pct = (int)((hold_ms * 100UL) / 5000UL);
     } else if (hold_ms < 3200) {
       snprintf(buf, sizeof(buf),
                "Release: MODE | OFFSET CAL in %.1f s",
                to_offset_cal);
-      progress_pct = (int)((hold_ms * 100UL) / 3200UL);
+      progress_pct = (int)((hold_ms * 100UL) / 5000UL);
+    } else if (hold_ms < 5000) {
+      snprintf(buf, sizeof(buf),
+               "Release: OFFSET CAL | SLEEP in %.1f s",
+               to_sleep);
+      progress_pct = (int)((hold_ms * 100UL) / 5000UL);
     } else {
-      snprintf(buf, sizeof(buf), "Release: OFFSET CAL");
+      snprintf(buf, sizeof(buf), "Release: DEEP SLEEP");
       progress_pct = 100;
     }
   }
@@ -728,6 +784,19 @@ static void create_ui()
   lv_obj_set_style_text_color(label_mode, lv_color_hex(0xC0C0C0), 0);
   lv_obj_align(label_mode, LV_ALIGN_TOP_LEFT, 2, 2); // Changed to 2 from 6
 
+  label_battery = lv_label_create(scr);
+  lv_label_set_text(label_battery, "BAT --");
+  lv_obj_set_style_text_font(label_battery, &lv_font_montserrat_20, 0);
+  lv_obj_set_style_text_color(label_battery, lv_color_hex(0xA0A0A0), 0);
+  lv_obj_align(label_battery, LV_ALIGN_TOP_RIGHT, -4, 6);
+
+  label_battery_charge = lv_label_create(scr);
+  lv_label_set_text(label_battery_charge, LV_SYMBOL_CHARGE);
+  lv_obj_set_style_text_font(label_battery_charge, &lv_font_montserrat_20, 0);
+  lv_obj_set_style_text_color(label_battery_charge, lv_color_hex(0x6FD3FF), 0);
+  lv_obj_align(label_battery_charge, LV_ALIGN_TOP_RIGHT, -4, 6);
+  lv_obj_add_flag(label_battery_charge, LV_OBJ_FLAG_HIDDEN);
+
   // Modal header (hidden normally)
   label_header = lv_label_create(scr);
   lv_label_set_text(label_header, "");
@@ -1043,6 +1112,7 @@ static void update_ui()
 
   process_mode_pending();
   update_status_label();
+  update_battery_label();
 
   if (ui_state == UI_STATE_ALIGN) {
     update_alignment_instruction();
@@ -1074,11 +1144,40 @@ static void update_ui()
 
 void setup_display()
 {
-  gfx->begin();
-  show_startup_splash();
-  lv_init();
+  const esp_reset_reason_t reset_reason = esp_reset_reason();
+  const bool woke_from_deep_sleep = (reset_reason == ESP_RST_DEEPSLEEP);
+  if (woke_from_deep_sleep) {
+    // Deep-sleep wake can leave panel rails/logic in a slow-recovering state.
+    // Hard-reset the panel before begin() to make splash rendering deterministic.
+    pinMode(LCD_RST, OUTPUT);
+    digitalWrite(LCD_RST, LOW);
+    delay(35);
+    digitalWrite(LCD_RST, HIGH);
+    delay(220);
+  }
 
-  Touch_Init();
+  bool ok = false;
+  for (int i = 0; i < 5 && !ok; i++) {
+    ok = gfx->begin();
+    if (!ok) {
+      delay(80);
+    }
+  }
+  if (ok) {
+    gfx->displayOn();
+    delay(woke_from_deep_sleep ? 120 : 30);
+    // Clear once so first splash frame is not dropped on sleepy panel state.
+    gfx->fillScreen(0x0000);
+    delay(10);
+    if (woke_from_deep_sleep) {
+      // Defer wake splash until loop phase, after panel and LVGL are fully settled.
+      splash_deferred_until_first_loop = true;
+      splash_deferred_due_ms = millis() + 450;
+    } else {
+      show_startup_splash();
+    }
+  }
+  lv_init();
 
   buf1 = (lv_color_t *)heap_caps_malloc(
     LCD_WIDTH * 60 * sizeof(lv_color_t),
@@ -1117,14 +1216,39 @@ void setup_display()
   update_status_label();
 }
 
+void displayPrepareForDeepSleep(void)
+{
+  if (!gfx) return;
+  // Push black once before panel sleep for a clean visual transition.
+  gfx->fillScreen(0x0000);
+  delay(20);
+  gfx->displayOff();
+}
+
 void loop_display()
 {
   static uint32_t last_tick = 0;
   static uint32_t last_ui   = 0;
   static int last_rotation = -1;
+  static bool panel_wake_ensured = false;
 
   uint32_t now = millis();
   int desired_rotation = displayRotated ? 1 : 0;
+
+  if (!panel_wake_ensured && gfx) {
+    gfx->displayOn();
+    panel_wake_ensured = true;
+  }
+
+  if (splash_deferred_until_first_loop && gfx && (int32_t)(now - splash_deferred_due_ms) >= 0) {
+    gfx->displayOn();
+    delay(20);
+    show_startup_splash();
+    splash_deferred_until_first_loop = false;
+    const uint32_t t = millis();
+    last_tick = t;
+    last_ui = t;
+  }
 
   if (last_rotation != desired_rotation) {
     if (disp_handle) {
@@ -1136,9 +1260,13 @@ void loop_display()
     last_rotation = desired_rotation;
   }
 
-  if (now - last_tick >= 5) {
-    lv_tick_inc(5);
-    last_tick += 5;
+  if (last_tick == 0) {
+    last_tick = now;
+  }
+  uint32_t tick_elapsed = now - last_tick;
+  if (tick_elapsed > 0) {
+    lv_tick_inc(tick_elapsed);
+    last_tick = now;
   }
 
   lv_timer_handler();

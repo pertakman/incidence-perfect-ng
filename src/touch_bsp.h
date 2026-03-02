@@ -6,5 +6,6 @@
 // Touch BSP public API
 void Touch_Init(void);
 uint8_t getTouch(uint16_t *x, uint16_t *y);
+bool Touch_Sleep(void);
 
 #endif
