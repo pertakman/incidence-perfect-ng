@@ -2,7 +2,6 @@
 
 This folder keeps reference hardware/tool settings used during bring-up.
 
-- `board-settings-arduino-ide.jpg`: screenshot of Arduino IDE board configuration known to work with this hardware.
 - `SOURCES.md`: provenance + checksums for third-party vendor bundles/manuals kept outside Git.
 
 ## Extracted Settings From Screenshot
@@ -30,4 +29,4 @@ Items shown but without a value in the screenshot:
 
 Notes:
 - The active development workflow for this repository is VS Code + PlatformIO.
-- Keep this screenshot for cross-checking if Arduino IDE is used for troubleshooting or comparison.
+- The original board-settings screenshot is no longer stored in this repository.
