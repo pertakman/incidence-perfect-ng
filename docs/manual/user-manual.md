@@ -198,10 +198,10 @@ What you get in web UI:
 
 - Live `ROLL`/`PITCH` readout with the same status line as the device.
 - Battery status (`BAT/CHG`, percent, and voltage).
-- Normal controls: `ZERO`, `AXIS`, `FREEZE`, `ROTATE`, `OFFSET CAL`, `MODE`, `ALIGN`.
+- Normal controls: `ZERO`, `AXIS`, `MODE`, `ALIGN`, `ROTATE`, `FREEZE`, `OFFSET CAL`, `SLEEP`.
 - Context controls only when needed:
-  - `CONFIRM`/`CANCEL` during guided `ZERO` and `OFFSET CAL`
-  - `CAPTURE`/`CANCEL` during `ALIGN`
+  - `CANCEL`/`CONFIRM` during guided `ZERO` and `OFFSET CAL`
+  - `CANCEL`/`CAPTURE` during `ALIGN`
 - Progress bar during:
   - ZERO hold/sampling
   - OFFSET CAL hold/sampling
@@ -253,6 +253,10 @@ Important:
 
 Battery note:
 
+- In web `Network` settings, `Battery` can be set to:
+  - `Auto detect` (heuristic/default)
+  - `Installed` (force battery-present UI semantics)
+  - `No battery installed` (hide battery indicators in both web and touch UI)
 - Current charging state is inferred from battery-voltage trend in firmware.
 - The web/API exposes this via `battery_charging_inferred`.
 - Battery-pack presence is best-effort on this hardware; when firmware suspects "USB powered, no pack", web/API reports `battery_present=false` with `battery_present_inferred=true`.

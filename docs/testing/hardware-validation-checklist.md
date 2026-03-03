@@ -73,6 +73,9 @@ Use this checklist against the current firmware build to establish a known-good 
 | T52 | In web `Network` panel trigger `Recover AP Mode` | Device switches to AP-only, STA credentials are cleared, AP remains reachable |  |  |
 | T53 | Reboot device, then immediately press+hold ACTION continuously through startup for ~2 s (do not hold before power-on) | Boot-time network recovery applies AP-only defaults and STA credentials are cleared |  |  |
 | T54 | If two or more units are available, boot each in AP mode and compare SSIDs | Each unit reports a different `IncidencePerfectNG-XXXX` suffix (board-unique identity) |  |  |
+| T55 | In web `Network` set `Battery = No battery installed`, save, then refresh | Selection persists and web/touch battery indicators are hidden |  |  |
+| T56 | Power cycle after T55 | `Battery = No battery installed` persists and battery indicators remain hidden |  |  |
+| T57 | Set `Battery = Auto detect` or `Installed`, save | Battery indicators return in web/touch UI as configured |  |  |
 
 ## Optional Deep Check (Serial Alignment Flow)
 
@@ -88,5 +91,5 @@ Expected:
 
 ## Exit Criteria for Baseline Complete
 
-- T01-T54 pass.
+- T01-T57 pass.
 - Any failures are captured with reproducible steps and serial output snippets.
