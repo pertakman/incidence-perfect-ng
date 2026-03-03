@@ -213,6 +213,16 @@ static void update_battery_label()
 
   BatteryTelemetry battery = {};
   getBatteryTelemetry(&battery);
+  const bool battery_configured_absent = (!battery.present && !battery.present_inferred);
+
+  if (battery_configured_absent) {
+    lv_obj_add_flag(label_battery, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(label_battery_charge, LV_OBJ_FLAG_HIDDEN);
+    last[0] = '\0';
+    return;
+  }
+
+  lv_obj_clear_flag(label_battery, LV_OBJ_FLAG_HIDDEN);
 
   if (!battery.valid) {
     snprintf(buf, sizeof(buf), "BAT --");

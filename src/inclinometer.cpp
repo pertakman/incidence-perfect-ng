@@ -197,6 +197,7 @@ static const unsigned long batteryNoBatteryConfirmMs = 120000;
 static const float batteryNoBatteryMinVoltageV = 4.14f;
 static const float batteryNoBatteryPlateauDeltaV = 0.0035f;
 static const float batteryPresenceRecoverDeltaV = 0.010f;
+static BatteryPresenceMode batteryPresenceMode = BATTERY_PRESENCE_AUTO;
 // Calibrated against DMM at full charge so UI reads 4.2 V at top-of-charge.
 static const float batteryVoltageScaleCal = 1.0550f;
 static const unsigned long deepSleepPreEntryDelayMs = 20;
@@ -373,6 +374,7 @@ void initBatteryTelemetry() {
   batteryPresenceSawChargeEvidence = false;
   batteryPresenceSawDischargeEvidence = false;
   batteryNoBatteryCandidateMs = 0;
+  batteryPresenceMode = BATTERY_PRESENCE_AUTO;
 }
 
 void updateBatteryTelemetry(unsigned long now_ms) {
@@ -457,8 +459,16 @@ void updateBatteryTelemetry(unsigned long now_ms) {
     batteryTrendAnchorMs = now_ms;
   }
 
-  batteryTelemetry.present = batteryPresenceLikely;
-  batteryTelemetry.present_inferred = batteryPresenceInferred;
+  if (batteryPresenceMode == BATTERY_PRESENCE_FORCE_PRESENT) {
+    batteryTelemetry.present = true;
+    batteryTelemetry.present_inferred = false;
+  } else if (batteryPresenceMode == BATTERY_PRESENCE_FORCE_ABSENT) {
+    batteryTelemetry.present = false;
+    batteryTelemetry.present_inferred = false;
+  } else {
+    batteryTelemetry.present = batteryPresenceLikely;
+    batteryTelemetry.present_inferred = batteryPresenceInferred;
+  }
   if (!batteryTelemetry.present) {
     batteryTelemetry.charging = false;
   }
@@ -1688,6 +1698,19 @@ bool rollConditionIsLow(void) {
 void getBatteryTelemetry(BatteryTelemetry *out_telemetry) {
   if (!out_telemetry) return;
   *out_telemetry = batteryTelemetry;
+}
+
+BatteryPresenceMode getBatteryPresenceMode(void) {
+  return batteryPresenceMode;
+}
+
+void setBatteryPresenceMode(BatteryPresenceMode mode) {
+  if (mode != BATTERY_PRESENCE_FORCE_PRESENT &&
+      mode != BATTERY_PRESENCE_FORCE_ABSENT) {
+    batteryPresenceMode = BATTERY_PRESENCE_AUTO;
+    return;
+  }
+  batteryPresenceMode = mode;
 }
 
 void requestDeepSleep(void) {

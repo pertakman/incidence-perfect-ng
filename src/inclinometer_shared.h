@@ -67,6 +67,12 @@ struct BatteryTelemetry {
   bool present_inferred;
 };
 
+enum BatteryPresenceMode {
+  BATTERY_PRESENCE_AUTO = 0,
+  BATTERY_PRESENCE_FORCE_PRESENT = 1,
+  BATTERY_PRESENCE_FORCE_ABSENT = 2
+};
+
 // Forward declarations used across files
 void setOrientation(OrientationMode m);
 
@@ -86,6 +92,8 @@ bool measurementIsFrozen(void);
 float rollConditionPercent(void);
 bool rollConditionIsLow(void);
 void getBatteryTelemetry(BatteryTelemetry *out_telemetry);
+BatteryPresenceMode getBatteryPresenceMode(void);
+void setBatteryPresenceMode(BatteryPresenceMode mode);
 void requestDeepSleep(void);
 bool bootHoldIsActive(void);
 unsigned long bootHoldDurationMs(void);

@@ -24,6 +24,7 @@ constexpr const char *kPrefsMode = "mode";
 constexpr const char *kPrefsSsid = "sta_ssid";
 constexpr const char *kPrefsPass = "sta_pass";
 constexpr const char *kPrefsHost = "host";
+constexpr const char *kPrefsBatteryMode = "battery_mode";
 constexpr int kActionButtonPin = 0;
 
 constexpr unsigned long kStaConnectTimeoutMs = 12000UL;
@@ -173,24 +174,24 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
     <div id="normalControls" class="row">
       <button onclick="sendCmd('zero')">ZERO</button>
       <button onclick="sendCmd('axis')">AXIS</button>
-      <button onclick="sendCmd('freeze')">FREEZE</button>
-      <button onclick="sendCmd('rotate')">ROTATE</button>
-      <button onclick="sendCmd('offset_cal')">OFFSET CAL</button>
       <button onclick="sendCmd('mode_toggle')">MODE</button>
       <button onclick="sendCmd('align_start')">ALIGN</button>
+      <button onclick="sendCmd('rotate')">ROTATE</button>
+      <button onclick="sendCmd('freeze')">FREEZE</button>
+      <button onclick="sendCmd('offset_cal')">OFFSET CAL</button>
       <button onclick="sendCmd('sleep')">SLEEP</button>
     </div>
     <div id="modeControls" class="row hidden" style="margin-top:10px;">
-      <button onclick="sendCmd('confirm')">CONFIRM</button>
       <button onclick="sendCmd('cancel')">CANCEL</button>
+      <button onclick="sendCmd('confirm')">CONFIRM</button>
     </div>
     <div id="alignControls" class="row hidden" style="margin-top:10px;">
-      <button onclick="sendCmd('capture')">CAPTURE</button>
       <button onclick="sendCmd('cancel')">CANCEL</button>
+      <button onclick="sendCmd('capture')">CAPTURE</button>
     </div>
     <div id="offsetCalControls" class="row hidden" style="margin-top:10px;">
-      <button onclick="sendCmd('confirm')">CONFIRM</button>
       <button onclick="sendCmd('cancel')">CANCEL</button>
+      <button onclick="sendCmd('confirm')">CONFIRM</button>
     </div>
     <div id="progressWrap" class="bar hidden"><div id="progressBar"></div></div>
     <div id="msg"></div>
@@ -206,6 +207,14 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
         <select id="netMode">
           <option value="ap">AP only</option>
           <option value="sta">STA with AP fallback</option>
+        </select>
+      </label>
+      <label style="min-width:170px;">
+        <div class="muted" style="margin:0 0 4px 0;">Battery</div>
+        <select id="netBatteryMode">
+          <option value="auto">Auto detect</option>
+          <option value="present">Installed</option>
+          <option value="absent">No battery installed</option>
         </select>
       </label>
       <label style="flex:1; min-width:180px;">
@@ -317,6 +326,7 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
     const netStatusEl = document.getElementById('netStatus');
     const netAddrEl = document.getElementById('netAddr');
     const netModeEl = document.getElementById('netMode');
+    const netBatteryModeEl = document.getElementById('netBatteryMode');
     const netHostnameEl = document.getElementById('netHostname');
     const netSsidEl = document.getElementById('netSsid');
     const netPasswordEl = document.getElementById('netPassword');
@@ -348,7 +358,7 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
     const CRIT_LIMIT = 45.0;
     let networkFormDirty = false;
 
-    [netModeEl, netHostnameEl, netSsidEl, netPasswordEl].forEach((el) => {
+    [netModeEl, netBatteryModeEl, netHostnameEl, netSsidEl, netPasswordEl].forEach((el) => {
       el.addEventListener('input', () => { networkFormDirty = true; });
     });
     otaFileEl.addEventListener('change', onOtaFileSelected);
@@ -456,7 +466,9 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
     function renderNetwork(s) {
       const mode = String(s.net_mode || 'AP');
       const pref = String(s.net_pref || 'ap').toUpperCase();
+      const batteryMode = String(s.battery_mode || 'auto').toUpperCase();
       const statusBits = [`Mode ${mode}`, `Preference ${pref}`];
+      statusBits.push(`Battery ${batteryMode}`);
       if (s.sta_connected) statusBits.push('STA connected');
       if (s.ap_active) statusBits.push('AP active');
       netStatusEl.textContent = statusBits.join(' | ');
@@ -469,6 +481,8 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
 
       if (!networkFormDirty) {
         netModeEl.value = (String(s.net_pref || 'ap').toLowerCase() === 'sta') ? 'sta' : 'ap';
+        const batteryMode = String(s.battery_mode || 'auto').toLowerCase();
+        netBatteryModeEl.value = (batteryMode === 'present' || batteryMode === 'absent') ? batteryMode : 'auto';
         netHostnameEl.value = s.hostname || '';
         netSsidEl.value = s.sta_ssid || '';
       }
@@ -488,14 +502,15 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
       const batteryKnown = !!s.battery_valid;
       const batteryPresent = (s.battery_present !== false);
       const batteryPresentInferred = !!s.battery_present_inferred;
+      const batteryConfiguredAbsent = (!batteryPresent && !batteryPresentInferred);
       const batteryPct = Number(s.battery_soc_pct || 0).toFixed(0);
       const batteryVolts = Number(s.battery_voltage_v || 0).toFixed(1);
-      const batteryState = (!batteryPresent && batteryPresentInferred)
-        ? 'BAT?'
-        : (s.battery_charging ? 'CHG' : 'BAT');
-      const batteryStatus = batteryKnown ? `${batteryState} ${batteryPct}% ${batteryVolts} V` : 'BAT --';
+      const batteryState = ((!batteryPresent && batteryPresentInferred) ? 'BAT?' : (s.battery_charging ? 'CHG' : 'BAT'));
+      const batteryStatus = batteryConfiguredAbsent
+        ? ''
+        : (batteryKnown ? ` | ${batteryState} ${batteryPct}% ${batteryVolts} V` : ' | BAT --');
       statusEl.textContent =
-        `${s.orientation} | ${s.axis} | ROT ${s.rotation} | ${s.live} | ${batteryStatus}`;
+        `${s.orientation} | ${s.axis} | ROT ${s.rotation} | ${s.live}${batteryStatus}`;
       const axisText = String(s.axis || '').toUpperCase();
       const axis = (axisText === 'ROLL' || s.axis_id === 1) ? 'ROLL'
                  : (axisText === 'PITCH' || s.axis_id === 2) ? 'PITCH'
@@ -507,7 +522,9 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
         condEl.textContent = '';
       }
       if (batteryKnown) {
-        if (!batteryPresent && batteryPresentInferred) {
+        if (batteryConfiguredAbsent) {
+          batEl.textContent = '';
+        } else if (!batteryPresent && batteryPresentInferred) {
           batEl.textContent = `Battery likely not connected (inferred; rail ${batteryVolts} V)`;
         } else {
           batEl.textContent = s.battery_charging
@@ -592,6 +609,9 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
 
     async function saveNetwork() {
       const mode = netModeEl.value === 'sta' ? 'sta' : 'ap';
+      const batteryMode = netBatteryModeEl.value === 'present'
+        ? 'present'
+        : (netBatteryModeEl.value === 'absent' ? 'absent' : 'auto');
       const ssid = netSsidEl.value.trim();
       const hostname = netHostnameEl.value.trim();
       const password = netPasswordEl.value;
@@ -606,6 +626,7 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
       try {
         const body = new URLSearchParams();
         body.set('mode', mode);
+        body.set('battery_mode', batteryMode);
         body.set('ssid', ssid);
         body.set('hostname', hostname);
         if (password.length > 0) body.set('password', password);
@@ -869,6 +890,27 @@ void build_default_hostname(char *dst, size_t dst_size) {
   snprintf(dst, dst_size, "incidence-perfect-ng-%04x", suffix);
 }
 
+const char *battery_presence_mode_to_pref(BatteryPresenceMode mode) {
+  switch (mode) {
+    case BATTERY_PRESENCE_FORCE_PRESENT: return "present";
+    case BATTERY_PRESENCE_FORCE_ABSENT: return "absent";
+    default: return "auto";
+  }
+}
+
+BatteryPresenceMode parse_battery_presence_mode(const String &raw) {
+  String s = raw;
+  s.trim();
+  s.toLowerCase();
+  if (s == "present" || s == "installed" || s == "on") {
+    return BATTERY_PRESENCE_FORCE_PRESENT;
+  }
+  if (s == "absent" || s == "none" || s == "off") {
+    return BATTERY_PRESENCE_FORCE_ABSENT;
+  }
+  return BATTERY_PRESENCE_AUTO;
+}
+
 void sanitize_hostname(const String &raw, char *dst, size_t dst_size) {
   char fallback[33];
   build_default_hostname(fallback, sizeof(fallback));
@@ -1089,12 +1131,14 @@ bool load_network_config() {
   String ssid = prefs.isKey(kPrefsSsid) ? prefs.getString(kPrefsSsid) : String("");
   String pass = prefs.isKey(kPrefsPass) ? prefs.getString(kPrefsPass) : String("");
   String host = prefs.isKey(kPrefsHost) ? prefs.getString(kPrefsHost) : String(net_cfg.hostname);
+  String battery_mode = prefs.isKey(kPrefsBatteryMode) ? prefs.getString(kPrefsBatteryMode) : String("auto");
   prefs.end();
 
   mode.toLowerCase();
   copy_cstr(net_cfg.sta_ssid, sizeof(net_cfg.sta_ssid), ssid.c_str());
   copy_cstr(net_cfg.sta_password, sizeof(net_cfg.sta_password), pass.c_str());
   sanitize_hostname(host, net_cfg.hostname, sizeof(net_cfg.hostname));
+  setBatteryPresenceMode(parse_battery_presence_mode(battery_mode));
 
   if (mode == "sta" && net_cfg.sta_ssid[0] != '\0') {
     net_cfg.prefer_sta = true;
@@ -1111,6 +1155,7 @@ bool save_network_config() {
   prefs.putString(kPrefsSsid, net_cfg.sta_ssid);
   prefs.putString(kPrefsPass, net_cfg.sta_password);
   prefs.putString(kPrefsHost, net_cfg.hostname);
+  prefs.putString(kPrefsBatteryMode, battery_presence_mode_to_pref(getBatteryPresenceMode()));
   prefs.end();
   return true;
 }
@@ -1331,6 +1376,7 @@ void send_network_state_json(bool ok = true, const char *error = nullptr, int co
     sizeof(json),
     "{\"ok\":%s,"
     "\"net_mode\":\"%s\",\"net_pref\":\"%s\","
+    "\"battery_mode\":\"%s\","
     "\"hostname\":\"%s\",\"hostname_local\":\"%s\","
     "\"sta_ssid\":\"%s\",\"sta_connected\":%s,\"sta_ip\":\"%s\","
     "\"ap_active\":%s,\"ap_ssid\":\"%s\",\"ap_ip\":\"%s\","
@@ -1338,6 +1384,7 @@ void send_network_state_json(bool ok = true, const char *error = nullptr, int co
     "\"error\":\"%s\"}",
     ok ? "true" : "false",
     mode_esc, pref_esc,
+    battery_presence_mode_to_pref(getBatteryPresenceMode()),
     host_esc, host_local_esc,
     ssid_esc, sta_connected ? "true" : "false", sta_ip_esc,
     ap_active ? "true" : "false", ap_ssid_esc, ap_ip_esc,
@@ -1662,11 +1709,13 @@ void handle_network_get() {
 
 void handle_network_post() {
   const String mode_in = get_request_value("mode");
+  const String battery_mode_in = get_request_value("battery_mode");
   const String ssid_in = get_request_value("ssid");
   const String pass_in = get_request_value("password");
   const String host_in = get_request_value("hostname");
 
   bool update_mode = mode_in.length() > 0;
+  bool update_battery_mode = battery_mode_in.length() > 0 || server.hasArg("battery_mode");
   bool update_ssid = ssid_in.length() > 0 || server.hasArg("ssid");
   bool update_pass = pass_in.length() > 0 || server.hasArg("password");
   bool update_host = host_in.length() > 0 || server.hasArg("hostname");
@@ -1680,6 +1729,9 @@ void handle_network_post() {
       send_network_state_json(false, "mode must be 'ap' or 'sta'", 400);
       return;
     }
+  }
+  if (update_battery_mode) {
+    setBatteryPresenceMode(parse_battery_presence_mode(battery_mode_in));
   }
   if (update_ssid) {
     copy_cstr(net_cfg.sta_ssid, sizeof(net_cfg.sta_ssid), ssid_in.c_str());
