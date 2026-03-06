@@ -14,6 +14,8 @@
 #include <string.h>
 #include "touch_bsp.h"
 
+LV_FONT_DECLARE(lv_font_montserrat_56_num);
+
 // ============================================================
 // DISPLAY CONFIG
 // ============================================================
@@ -144,7 +146,33 @@ static lv_obj_t *label_pitch;
 static lv_obj_t *label_roll_value;
 static lv_obj_t *label_pitch_value;
 
-constexpr int READOUT_Y = 18;   // moved up to free room for hints above controls
+// Layout knobs (field-tunable)
+constexpr int READOUT_Y = -35;      // whole readout block vertical offset from screen center
+constexpr int BTN_H = 78;           // primary touch target height
+constexpr int READOUT_HALF_SPAN_X = 120;
+
+// Derived layout metrics
+constexpr int READOUT_LABEL_FONT_PX = 20;
+constexpr int READOUT_VALUE_FONT_PX = 56;
+constexpr int READOUT_LABEL_TO_VALUE_GAP = 4;
+constexpr int READOUT_TOP_BOTTOM_PAD = 6;
+constexpr int READOUT_GROUP_W = 244;
+constexpr int READOUT_GROUP_H =
+  READOUT_LABEL_FONT_PX +
+  READOUT_LABEL_TO_VALUE_GAP +
+  READOUT_VALUE_FONT_PX +
+  (2 * READOUT_TOP_BOTTOM_PAD);
+
+constexpr int DIVIDER_H = 2;
+constexpr int BOTTOM_ROW_GAP = 1;
+constexpr int BTN_BAR_PAD_TOP = 8;
+constexpr int BTN_BAR_PAD_BOTTOM = 10;
+constexpr int BTN_BAR_H = BTN_H + BTN_BAR_PAD_TOP + BTN_BAR_PAD_BOTTOM;
+constexpr int BTN_W = 96;
+constexpr int BOOT_HINT_H = 40;
+constexpr int BOOT_HINT_BOTTOM_MARGIN = 20;
+constexpr int BOTTOM_CONTROL_H = DIVIDER_H + BOTTOM_ROW_GAP + BTN_BAR_H;
+constexpr int BOOT_HINT_Y_FROM_BOTTOM = -(BOTTOM_CONTROL_H + BOOT_HINT_BOTTOM_MARGIN);
 
 // Buttons
 static lv_obj_t *btn_zero;
@@ -267,6 +295,25 @@ static void update_alignment_instruction()
   lv_label_set_text(label_instruction, buf);
 }
 
+static void set_readout_hint_overlay(bool hint_visible)
+{
+  static bool last_hint_visible = false;
+  if (hint_visible == last_hint_visible) return;
+  last_hint_visible = hint_visible;
+
+  if (hint_visible) {
+    lv_obj_add_flag(label_roll, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(label_pitch, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(label_roll_value, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(label_pitch_value, LV_OBJ_FLAG_HIDDEN);
+  } else {
+    lv_obj_clear_flag(label_roll, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_clear_flag(label_pitch, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_clear_flag(label_roll_value, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_clear_flag(label_pitch_value, LV_OBJ_FLAG_HIDDEN);
+  }
+}
+
 static float countdown_display_seconds(float seconds_remaining)
 {
   if (seconds_remaining <= 0.0f) return 0.0f;
@@ -289,6 +336,7 @@ static void update_boot_hint_label()
     if (!alignmentCaptureInProgress()) {
       lv_obj_add_flag(boot_hint_box, LV_OBJ_FLAG_HIDDEN);
       lv_obj_add_flag(boot_hint_progress, LV_OBJ_FLAG_HIDDEN);
+      set_readout_hint_overlay(false);
       last[0] = '\0';
       return;
     }
@@ -395,6 +443,7 @@ static void update_boot_hint_label()
   } else if (!bootHoldIsActive()) {
     lv_obj_add_flag(boot_hint_box, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(boot_hint_progress, LV_OBJ_FLAG_HIDDEN);
+    set_readout_hint_overlay(false);
     last[0] = '\0';
     return;
   }
@@ -451,6 +500,7 @@ static void update_boot_hint_label()
     lv_obj_add_flag(boot_hint_progress, LV_OBJ_FLAG_HIDDEN);
   }
   lv_obj_clear_flag(boot_hint_box, LV_OBJ_FLAG_HIDDEN);
+  set_readout_hint_overlay(true);
 }
 
 // ============================================================
@@ -510,8 +560,8 @@ static void apply_axis_layout()
     case AXIS_BOTH:
       lv_obj_clear_flag(roll_grp,  LV_OBJ_FLAG_HIDDEN);
       lv_obj_clear_flag(pitch_grp, LV_OBJ_FLAG_HIDDEN);
-      lv_obj_align(roll_grp,  LV_ALIGN_CENTER, -120, READOUT_Y);
-      lv_obj_align(pitch_grp, LV_ALIGN_CENTER,  120, READOUT_Y);
+      lv_obj_align(roll_grp,  LV_ALIGN_CENTER, -READOUT_HALF_SPAN_X, READOUT_Y);
+      lv_obj_align(pitch_grp, LV_ALIGN_CENTER,  READOUT_HALF_SPAN_X, READOUT_Y);
       break;
 
     case AXIS_ROLL:
@@ -530,6 +580,14 @@ static void apply_axis_layout()
   update_status_label();
 }
 
+static void apply_action_label_font(bool mode_small, bool align_small)
+{
+  const lv_font_t *normal_font = &lv_font_montserrat_20;
+  const lv_font_t *small_font = &lv_font_montserrat_18;
+  lv_obj_set_style_text_font(label_btn_mode, mode_small ? small_font : normal_font, 0);
+  lv_obj_set_style_text_font(label_btn_align, align_small ? small_font : normal_font, 0);
+}
+
 static void apply_ui_state()
 {
   switch (ui_state) {
@@ -543,6 +601,7 @@ static void apply_ui_state()
       lv_label_set_text(label_btn_zero,  "ZERO");
       lv_label_set_text(label_btn_mode,  "MODE");
       lv_label_set_text(label_btn_align, "ALIGN");
+      apply_action_label_font(false, false);
 
       lv_obj_clear_state(btn_mode,   LV_STATE_DISABLED);
       lv_obj_clear_state(btn_rotate, LV_STATE_DISABLED);
@@ -566,6 +625,7 @@ static void apply_ui_state()
 
       lv_label_set_text(label_btn_zero,  "CANCEL");
       lv_label_set_text(label_btn_align, "CAPTURE");
+      apply_action_label_font(false, true);
 
       lv_obj_add_state(btn_mode,   LV_STATE_DISABLED);
       lv_obj_add_state(btn_rotate, LV_STATE_DISABLED);
@@ -581,6 +641,7 @@ static void apply_ui_state()
       lv_label_set_text(label_btn_zero, "CANCEL");
       lv_label_set_text(label_btn_mode, "CONFIRM");
       lv_label_set_text(label_btn_align, "ALIGN");
+      apply_action_label_font(true, false);
 
       lv_obj_add_state(btn_axis,   LV_STATE_DISABLED);
       lv_obj_add_state(btn_align,  LV_STATE_DISABLED);
@@ -598,6 +659,7 @@ static void apply_ui_state()
       lv_label_set_text(label_btn_zero, "CANCEL");
       lv_label_set_text(label_btn_mode, "CONFIRM");
       lv_label_set_text(label_btn_align, "ALIGN");
+      apply_action_label_font(true, false);
 
       lv_obj_add_state(btn_axis,   LV_STATE_DISABLED);
       lv_obj_add_state(btn_align,  LV_STATE_DISABLED);
@@ -615,6 +677,7 @@ static void apply_ui_state()
       lv_label_set_text(label_btn_zero, "CANCEL");
       lv_label_set_text(label_btn_mode, "CONFIRM");
       lv_label_set_text(label_btn_align, "ALIGN");
+      apply_action_label_font(true, false);
 
       lv_obj_add_state(btn_axis,   LV_STATE_DISABLED);
       lv_obj_add_state(btn_align,  LV_STATE_DISABLED);
@@ -825,8 +888,8 @@ static void create_ui()
   lv_obj_add_flag(label_header, LV_OBJ_FLAG_HIDDEN);
 
   boot_hint_box = lv_obj_create(scr);
-  lv_obj_set_size(boot_hint_box, lv_pct(96), 34);
-  lv_obj_align(boot_hint_box, LV_ALIGN_BOTTOM_MID, 0, -68);
+  lv_obj_set_size(boot_hint_box, lv_pct(96), BOOT_HINT_H);
+  lv_obj_align(boot_hint_box, LV_ALIGN_BOTTOM_MID, 0, BOOT_HINT_Y_FROM_BOTTOM);
   lv_obj_set_style_bg_color(boot_hint_box, lv_color_black(), 0);
   lv_obj_set_style_bg_opa(boot_hint_box, LV_OPA_80, 0);
   lv_obj_set_style_border_width(boot_hint_box, 0, 0);
@@ -836,7 +899,7 @@ static void create_ui()
 
   label_boot_hint = lv_label_create(boot_hint_box);
   lv_label_set_text(label_boot_hint, "");
-  lv_obj_set_style_text_font(label_boot_hint, &lv_font_montserrat_20, 0);
+  lv_obj_set_style_text_font(label_boot_hint, &lv_font_montserrat_24, 0);
   lv_obj_set_style_text_color(label_boot_hint, lv_color_hex(0xE6F5FF), 0);
   lv_obj_set_style_text_align(label_boot_hint, LV_TEXT_ALIGN_CENTER, 0);
   lv_label_set_long_mode(label_boot_hint, LV_LABEL_LONG_WRAP);
@@ -897,43 +960,62 @@ static void create_ui()
   lv_obj_add_flag(roll_grp, LV_OBJ_FLAG_CLICKABLE);
   lv_obj_set_style_bg_opa(roll_grp, LV_OPA_TRANSP, 0);
   lv_obj_set_style_border_width(roll_grp, 0, 0);
+  lv_obj_set_style_pad_all(roll_grp, 0, 0);
+  lv_obj_set_size(roll_grp, READOUT_GROUP_W, READOUT_GROUP_H);
   lv_obj_set_flex_flow(roll_grp, LV_FLEX_FLOW_COLUMN);
-  lv_obj_align(roll_grp, LV_ALIGN_CENTER, -120, READOUT_Y);   // vertical spacing (Changed to 60 from 36)
+  lv_obj_set_flex_align(roll_grp,
+                        LV_FLEX_ALIGN_CENTER,
+                        LV_FLEX_ALIGN_CENTER,
+                        LV_FLEX_ALIGN_CENTER);
+  lv_obj_align(roll_grp, LV_ALIGN_CENTER, -READOUT_HALF_SPAN_X, READOUT_Y);
 
   label_roll = lv_label_create(roll_grp);
+  lv_obj_set_width(label_roll, lv_pct(100));
   lv_label_set_text(label_roll, "ROLL");
   lv_obj_set_style_text_font(label_roll, &lv_font_montserrat_20, 0);
   lv_obj_set_style_text_color(label_roll, lv_color_hex(0xD0D0D0), 0);
+  lv_obj_set_style_text_align(label_roll, LV_TEXT_ALIGN_CENTER, 0);
 
   label_roll_value = lv_label_create(roll_grp);
-  lv_obj_set_style_text_font(label_roll_value, &lv_font_montserrat_48, 0);
+  lv_obj_set_width(label_roll_value, lv_pct(100));
+  lv_label_set_long_mode(label_roll_value, LV_LABEL_LONG_CLIP);
+  lv_obj_set_style_text_font(label_roll_value, &lv_font_montserrat_56_num, 0);
+  lv_obj_set_style_text_align(label_roll_value, LV_TEXT_ALIGN_CENTER, 0);
 
   // --- Pitch ---
   pitch_grp = lv_obj_create(scr);
   lv_obj_add_flag(pitch_grp, LV_OBJ_FLAG_CLICKABLE);
   lv_obj_set_style_bg_opa(pitch_grp, LV_OPA_TRANSP, 0);
   lv_obj_set_style_border_width(pitch_grp, 0, 0);
+  lv_obj_set_style_pad_all(pitch_grp, 0, 0);
+  lv_obj_set_size(pitch_grp, READOUT_GROUP_W, READOUT_GROUP_H);
   lv_obj_set_flex_flow(pitch_grp, LV_FLEX_FLOW_COLUMN);
-  lv_obj_align(pitch_grp, LV_ALIGN_CENTER, 120, READOUT_Y);   // vertical spacing (Changed to 60 from 36)
+  lv_obj_set_flex_align(pitch_grp,
+                        LV_FLEX_ALIGN_CENTER,
+                        LV_FLEX_ALIGN_CENTER,
+                        LV_FLEX_ALIGN_CENTER);
+  lv_obj_align(pitch_grp, LV_ALIGN_CENTER, READOUT_HALF_SPAN_X, READOUT_Y);
 
   label_pitch = lv_label_create(pitch_grp);
+  lv_obj_set_width(label_pitch, lv_pct(100));
   lv_label_set_text(label_pitch, "PITCH");
   lv_obj_set_style_text_font(label_pitch, &lv_font_montserrat_20, 0);
   lv_obj_set_style_text_color(label_pitch, lv_color_hex(0xD0D0D0), 0);
+  lv_obj_set_style_text_align(label_pitch, LV_TEXT_ALIGN_CENTER, 0);
 
   label_pitch_value = lv_label_create(pitch_grp);
-  lv_obj_set_style_text_font(label_pitch_value, &lv_font_montserrat_48, 0);
+  lv_obj_set_width(label_pitch_value, lv_pct(100));
+  lv_label_set_long_mode(label_pitch_value, LV_LABEL_LONG_CLIP);
+  lv_obj_set_style_text_font(label_pitch_value, &lv_font_montserrat_56_num, 0);
+  lv_obj_set_style_text_align(label_pitch_value, LV_TEXT_ALIGN_CENTER, 0);
 
   // ==========================================================
   // BOTTOM CONTROL AREA (fixed, no reflow)
   // ==========================================================
 
-  constexpr int DIVIDER_H = 2;
-  constexpr int BTN_BAR_H = 70;
-
   lv_obj_t *bottom = lv_obj_create(scr);
   lv_obj_set_width(bottom, lv_pct(100));
-  lv_obj_set_height(bottom, DIVIDER_H + BTN_BAR_H);
+  lv_obj_set_height(bottom, BOTTOM_CONTROL_H);
   lv_obj_align(bottom, LV_ALIGN_BOTTOM_MID, 0, 0);
   lv_obj_set_flex_flow(bottom, LV_FLEX_FLOW_COLUMN);
 
@@ -941,7 +1023,7 @@ static void create_ui()
   lv_obj_set_style_border_width(bottom, 0, 0);
   lv_obj_set_style_shadow_width(bottom, 0, 0);
   lv_obj_set_style_pad_all(bottom, 0, 0);
-  lv_obj_set_style_pad_row(bottom, 6, 0);
+  lv_obj_set_style_pad_row(bottom, BOTTOM_ROW_GAP, 0);
 
   lv_obj_clear_flag(bottom, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_set_scrollbar_mode(bottom, LV_SCROLLBAR_MODE_OFF);
@@ -961,11 +1043,8 @@ static void create_ui()
   lv_obj_set_height(bar, BTN_BAR_H);
   lv_obj_set_width(bar, lv_pct(100));
 
-  // 🔒 CRITICAL: no layout, no repaint flicker
-  lv_obj_add_flag(bar, LV_OBJ_FLAG_IGNORE_LAYOUT);
-
-  // Invisible but non-redrawing background
-  lv_obj_set_style_bg_opa(bar, LV_OPA_0, 0);
+  // Opaque bar background avoids blend artifacts on fast redraws.
+  lv_obj_set_style_bg_opa(bar, LV_OPA_COVER, 0);
   lv_obj_set_style_bg_color(bar, lv_color_black(), 0);
 
   lv_obj_clear_flag(bar, LV_OBJ_FLAG_SCROLLABLE);
@@ -976,8 +1055,8 @@ static void create_ui()
   lv_obj_set_style_shadow_width(bar, 0, 0);
   lv_obj_set_style_pad_all(bar, 0, 0);
   lv_obj_set_style_pad_column(bar, 6, 0);
-  lv_obj_set_style_pad_top(bar, 4, 0);
-  lv_obj_set_style_pad_bottom(bar, 4, 0);
+  lv_obj_set_style_pad_top(bar, BTN_BAR_PAD_TOP, 0);
+  lv_obj_set_style_pad_bottom(bar, BTN_BAR_PAD_BOTTOM, 0);
 
 
   lv_obj_set_flex_flow(bar, LV_FLEX_FLOW_ROW);
@@ -985,10 +1064,6 @@ static void create_ui()
                         LV_FLEX_ALIGN_SPACE_EVENLY,
                         LV_FLEX_ALIGN_CENTER,
                         LV_FLEX_ALIGN_CENTER);
-
-  // --- Buttons ---
-  constexpr int BTN_W = 96;
-  constexpr int BTN_H = 50;
 
   btn_zero   = lv_btn_create(bar);
   btn_axis   = lv_btn_create(bar);
@@ -1010,11 +1085,11 @@ static void create_ui()
   lv_obj_set_ext_click_area(btn_rotate, 10);
 
   // Preserve shadow for press animation
-  lv_obj_set_style_shadow_width(btn_zero,   8, LV_STATE_DEFAULT);
-  lv_obj_set_style_shadow_width(btn_axis,   8, LV_STATE_DEFAULT);
-  lv_obj_set_style_shadow_width(btn_mode,   8, LV_STATE_DEFAULT);
-  lv_obj_set_style_shadow_width(btn_align,  8, LV_STATE_DEFAULT);
-  lv_obj_set_style_shadow_width(btn_rotate, 8, LV_STATE_DEFAULT);
+  lv_obj_set_style_shadow_width(btn_zero,   6, LV_STATE_DEFAULT);
+  lv_obj_set_style_shadow_width(btn_axis,   6, LV_STATE_DEFAULT);
+  lv_obj_set_style_shadow_width(btn_mode,   6, LV_STATE_DEFAULT);
+  lv_obj_set_style_shadow_width(btn_align,  6, LV_STATE_DEFAULT);
+  lv_obj_set_style_shadow_width(btn_rotate, 6, LV_STATE_DEFAULT);
 
   // Snappier button interaction: faster transitions + tighter pressed feedback.
   lv_obj_set_style_anim_time(btn_zero,   70, LV_PART_MAIN);
@@ -1046,6 +1121,12 @@ static void create_ui()
   label_btn_mode   = lv_label_create(btn_mode);
   label_btn_align  = lv_label_create(btn_align);
   label_btn_rotate = lv_label_create(btn_rotate);
+
+  lv_obj_set_style_text_font(label_btn_zero,   &lv_font_montserrat_20, 0);
+  lv_obj_set_style_text_font(label_btn_axis,   &lv_font_montserrat_20, 0);
+  lv_obj_set_style_text_font(label_btn_mode,   &lv_font_montserrat_20, 0);
+  lv_obj_set_style_text_font(label_btn_align,  &lv_font_montserrat_20, 0);
+  lv_obj_set_style_text_font(label_btn_rotate, &lv_font_montserrat_20, 0);
 
   lv_label_set_text(label_btn_zero,   "ZERO");
   lv_label_set_text(label_btn_axis,   "AXIS");
@@ -1140,7 +1221,7 @@ static void update_ui()
 
   char buf[16];
 
-  snprintf(buf, sizeof(buf), "%+.2f%s", ui_roll_smooth, DEG_SYM);
+  snprintf(buf, sizeof(buf), "% .2f%s", ui_roll_smooth, DEG_SYM);
   if (strcmp(buf, last_r)) {
     lv_label_set_text(label_roll_value, buf);
     lv_obj_set_style_text_color(label_roll_value,
@@ -1148,7 +1229,7 @@ static void update_ui()
     strcpy(last_r, buf);
   }
 
-  snprintf(buf, sizeof(buf), "%+.2f%s", ui_pitch_smooth, DEG_SYM);
+  snprintf(buf, sizeof(buf), "% .2f%s", ui_pitch_smooth, DEG_SYM);
   if (strcmp(buf, last_p)) {
     lv_label_set_text(label_pitch_value, buf);
     lv_obj_set_style_text_color(label_pitch_value,
