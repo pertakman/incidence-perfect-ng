@@ -358,6 +358,7 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
     const WARN_LIMIT = 30.0;
     const CRIT_LIMIT = 45.0;
     let networkFormDirty = false;
+    let otaUploadInFlight = false;
 
     [netModeEl, netBatteryModeEl, netHostnameEl, netSsidEl, netPasswordEl].forEach((el) => {
       el.addEventListener('input', () => { networkFormDirty = true; });
@@ -538,6 +539,7 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
     }
 
     async function refreshLive() {
+      if (otaUploadInFlight) return;
       try {
         const r = await fetch('/api/live', { cache: 'no-store' });
         const s = await r.json();
@@ -549,6 +551,7 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
     }
 
     async function refreshState() {
+      if (otaUploadInFlight) return;
       try {
         const r = await fetch('/api/state', { cache: 'no-store' });
         const s = await r.json();
@@ -599,6 +602,7 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
     }
 
     async function refreshNetwork() {
+      if (otaUploadInFlight) return;
       try {
         const r = await fetch('/api/network', { cache: 'no-store' });
         const s = await r.json();
@@ -762,6 +766,7 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
 
       const force = !!otaForceEl.checked;
 
+      otaUploadInFlight = true;
       otaBtnEl.disabled = true;
       otaMsgEl.textContent = 'Uploading firmware...';
       otaProgressBarEl.style.width = '0%';
@@ -778,6 +783,7 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
         otaProgressBarEl.style.width = `${pct}%`;
       };
       xhr.onload = () => {
+        otaUploadInFlight = false;
         otaBtnEl.disabled = false;
         let out = {};
         try { out = JSON.parse(xhr.responseText || '{}'); } catch (_) {}
@@ -789,6 +795,7 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
         }
       };
       xhr.onerror = () => {
+        otaUploadInFlight = false;
         otaBtnEl.disabled = false;
         otaMsgEl.textContent = 'OTA upload failed.';
         otaProgressBarEl.style.width = '0%';
