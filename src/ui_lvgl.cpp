@@ -113,6 +113,7 @@ typedef enum {
 
 static ui_state_t ui_state = UI_STATE_NORMAL;
 static void ui_set_state(ui_state_t new_state);
+static void apply_ui_state();
 
 volatile AxisDisplayMode ui_axis_mode = AXIS_BOTH;
 
@@ -189,6 +190,13 @@ static lv_obj_t *label_btn_rotate;
 static uint32_t zero_feedback_until_ms = 0;
 static uint32_t zero_feedback_start_ms = 0;
 static bool zero_long_press_handled = false;
+static TouchUiLayoutMode active_touch_ui_layout = TOUCH_UI_ADVANCED;
+static uint32_t mode_btn_press_start_ms = 0;
+static bool mode_btn_press_active = false;
+
+constexpr uint32_t SIMPLE_VIEW_MEDIUM_HOLD_MS = 900;
+constexpr uint32_t SIMPLE_VIEW_LONG_HOLD_MS = 2200;
+constexpr int SIMPLE_BTN_W = 228;
 
 static const char *axis_mode_text()
 {
@@ -440,6 +448,45 @@ static void update_boot_hint_label()
     } else {
       progress_pct = 100;
     }
+  } else if (ui_state == UI_STATE_NORMAL && mode_btn_press_active) {
+    const uint32_t hold_ms = now_ms - mode_btn_press_start_ms;
+    if (active_touch_ui_layout == TOUCH_UI_SIMPLE) {
+      const float to_orientation =
+        (hold_ms < SIMPLE_VIEW_MEDIUM_HOLD_MS)
+          ? countdown_display_seconds((SIMPLE_VIEW_MEDIUM_HOLD_MS - hold_ms) / 1000.0f)
+          : 0.0f;
+      const float to_switch_ui =
+        (hold_ms < SIMPLE_VIEW_LONG_HOLD_MS)
+          ? countdown_display_seconds((SIMPLE_VIEW_LONG_HOLD_MS - hold_ms) / 1000.0f)
+          : 0.0f;
+
+      if (hold_ms < SIMPLE_VIEW_MEDIUM_HOLD_MS) {
+        snprintf(buf, sizeof(buf),
+                 "Release: AXIS | MODE in %.1f s",
+                 to_orientation);
+      } else if (hold_ms < SIMPLE_VIEW_LONG_HOLD_MS) {
+        snprintf(buf, sizeof(buf),
+                 "Release: MODE | SWITCH UI in %.1f s",
+                 to_switch_ui);
+      } else {
+        snprintf(buf, sizeof(buf), "Release: SWITCH UI");
+      }
+      progress_pct = (int)((hold_ms * 100UL) / SIMPLE_VIEW_LONG_HOLD_MS);
+    } else {
+      const float to_switch_ui =
+        (hold_ms < SIMPLE_VIEW_LONG_HOLD_MS)
+          ? countdown_display_seconds((SIMPLE_VIEW_LONG_HOLD_MS - hold_ms) / 1000.0f)
+          : 0.0f;
+
+      if (hold_ms < SIMPLE_VIEW_LONG_HOLD_MS) {
+        snprintf(buf, sizeof(buf),
+                 "Release: MODE | SWITCH UI in %.1f s",
+                 to_switch_ui);
+      } else {
+        snprintf(buf, sizeof(buf), "Release: SWITCH UI");
+      }
+      progress_pct = (int)((hold_ms * 100UL) / SIMPLE_VIEW_LONG_HOLD_MS);
+    }
   } else if (!bootHoldIsActive()) {
     lv_obj_add_flag(boot_hint_box, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(boot_hint_progress, LV_OBJ_FLAG_HIDDEN);
@@ -449,6 +496,7 @@ static void update_boot_hint_label()
   }
 
   if (ui_state == UI_STATE_NORMAL &&
+      !mode_btn_press_active &&
       now_ms >= zero_feedback_until_ms &&
       !modeWorkflowIsActive() &&
       !zeroWorkflowIsActive() &&
@@ -588,8 +636,42 @@ static void apply_action_label_font(bool mode_small, bool align_small)
   lv_obj_set_style_text_font(label_btn_align, align_small ? small_font : normal_font, 0);
 }
 
+static void apply_touch_layout_mode(void)
+{
+  if (active_touch_ui_layout == TOUCH_UI_SIMPLE) {
+    lv_obj_add_flag(btn_axis, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(btn_align, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(btn_rotate, LV_OBJ_FLAG_HIDDEN);
+
+    lv_obj_set_size(btn_zero, SIMPLE_BTN_W, BTN_H);
+    lv_obj_set_size(btn_mode, SIMPLE_BTN_W, BTN_H);
+  } else {
+    lv_obj_clear_flag(btn_axis, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_clear_flag(btn_align, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_clear_flag(btn_rotate, LV_OBJ_FLAG_HIDDEN);
+
+    lv_obj_set_size(btn_zero, BTN_W, BTN_H);
+    lv_obj_set_size(btn_axis, BTN_W, BTN_H);
+    lv_obj_set_size(btn_mode, BTN_W, BTN_H);
+    lv_obj_set_size(btn_align, BTN_W, BTN_H);
+    lv_obj_set_size(btn_rotate, BTN_W, BTN_H);
+  }
+}
+
+static void set_touch_layout_mode_local(TouchUiLayoutMode mode, bool persist)
+{
+  if (mode == active_touch_ui_layout) return;
+  active_touch_ui_layout = mode;
+  if (persist) {
+    setTouchUiLayoutMode(mode);
+  }
+  apply_ui_state();
+}
+
 static void apply_ui_state()
 {
+  apply_touch_layout_mode();
+
   switch (ui_state) {
 
     case UI_STATE_NORMAL:
@@ -599,7 +681,8 @@ static void apply_ui_state()
       lv_obj_add_flag(instr_grp,    LV_OBJ_FLAG_HIDDEN);
 
       lv_label_set_text(label_btn_zero,  "ZERO");
-      lv_label_set_text(label_btn_mode,  "MODE");
+      lv_label_set_text(label_btn_mode,
+        (active_touch_ui_layout == TOUCH_UI_SIMPLE) ? "VIEW" : "MODE");
       lv_label_set_text(label_btn_align, "ALIGN");
       apply_action_label_font(false, false);
 
@@ -712,7 +795,7 @@ void cycleMode(void)
 
 void cycleAxisMode(void)
 {
-  ui_axis_mode = (AxisDisplayMode)((ui_axis_mode + 1) % 3);
+  setAxisDisplayMode((AxisDisplayMode)((ui_axis_mode + 1) % 3));
   if (ui_state == UI_STATE_NORMAL) {
     apply_axis_layout();
   }
@@ -767,13 +850,14 @@ static void on_zero_long_pressed(lv_event_t *)
 static void on_axis_pressed(lv_event_t *)
 {
   if (ui_state != UI_STATE_NORMAL) return;
+  if (active_touch_ui_layout == TOUCH_UI_SIMPLE) return;
   modeWorkflowCancel();
   zeroWorkflowCancel();
   offsetCalibrationWorkflowCancel();
   cycleAxisMode();
 }
 
-static void on_mode_pressed(lv_event_t *)
+static void handle_mode_tap_action(void)
 {
   if (ui_state == UI_STATE_NORMAL) {
     modeWorkflowStartToggle();
@@ -796,6 +880,47 @@ static void on_mode_pressed(lv_event_t *)
   }
 
   if (ui_state != UI_STATE_MODE) return;
+}
+
+static void on_mode_pressed(lv_event_t *)
+{
+  mode_btn_press_start_ms = millis();
+  mode_btn_press_active = true;
+}
+
+static void on_mode_pressing(lv_event_t *)
+{
+  // Hold actions are resolved on release from measured press duration.
+}
+
+static void on_mode_released(lv_event_t *)
+{
+  const uint32_t elapsed = millis() - mode_btn_press_start_ms;
+  mode_btn_press_active = false;
+
+  if (ui_state == UI_STATE_NORMAL && elapsed >= SIMPLE_VIEW_LONG_HOLD_MS) {
+    const TouchUiLayoutMode next =
+      (active_touch_ui_layout == TOUCH_UI_SIMPLE) ? TOUCH_UI_ADVANCED : TOUCH_UI_SIMPLE;
+    set_touch_layout_mode_local(next, true);
+    return;
+  }
+
+  if (active_touch_ui_layout == TOUCH_UI_SIMPLE &&
+      ui_state == UI_STATE_NORMAL &&
+      elapsed >= SIMPLE_VIEW_MEDIUM_HOLD_MS) {
+    cycleMode();
+    return;
+  }
+
+  if (active_touch_ui_layout == TOUCH_UI_SIMPLE && ui_state == UI_STATE_NORMAL) {
+    modeWorkflowCancel();
+    zeroWorkflowCancel();
+    offsetCalibrationWorkflowCancel();
+    cycleAxisMode();
+    return;
+  }
+
+  handle_mode_tap_action();
 }
 
 static void on_readout_pressed(lv_event_t *)
@@ -894,7 +1019,7 @@ static void create_ui()
   lv_obj_set_style_bg_opa(boot_hint_box, LV_OPA_80, 0);
   lv_obj_set_style_border_width(boot_hint_box, 0, 0);
   lv_obj_set_style_radius(boot_hint_box, 8, 0);
-  lv_obj_set_style_pad_all(boot_hint_box, 2, 0);
+  lv_obj_set_style_pad_all(boot_hint_box, 1, 0);
   lv_obj_clear_flag(boot_hint_box, LV_OBJ_FLAG_SCROLLABLE);
 
   label_boot_hint = lv_label_create(boot_hint_box);
@@ -903,7 +1028,7 @@ static void create_ui()
   lv_obj_set_style_text_color(label_boot_hint, lv_color_hex(0xE6F5FF), 0);
   lv_obj_set_style_text_align(label_boot_hint, LV_TEXT_ALIGN_CENTER, 0);
   lv_label_set_long_mode(label_boot_hint, LV_LABEL_LONG_WRAP);
-  lv_obj_set_width(label_boot_hint, lv_pct(98));
+  lv_obj_set_width(label_boot_hint, lv_pct(100));
   lv_obj_align(label_boot_hint, LV_ALIGN_TOP_MID, 0, 0);
 
   boot_hint_progress = lv_bar_create(boot_hint_box);
@@ -1143,7 +1268,9 @@ static void create_ui()
   lv_obj_add_event_cb(btn_zero,   on_zero_pressed,   LV_EVENT_CLICKED, NULL);
   lv_obj_add_event_cb(btn_zero,   on_zero_long_pressed, LV_EVENT_LONG_PRESSED, NULL);
   lv_obj_add_event_cb(btn_axis,   on_axis_pressed,   LV_EVENT_CLICKED, NULL);
-  lv_obj_add_event_cb(btn_mode,   on_mode_pressed,   LV_EVENT_CLICKED, NULL);
+  lv_obj_add_event_cb(btn_mode,   on_mode_pressed,   LV_EVENT_PRESSED, NULL);
+  lv_obj_add_event_cb(btn_mode,   on_mode_pressing,  LV_EVENT_PRESSING, NULL);
+  lv_obj_add_event_cb(btn_mode,   on_mode_released,  LV_EVENT_RELEASED, NULL);
   lv_obj_add_event_cb(btn_align,  on_align_pressed,  LV_EVENT_CLICKED, NULL);
   lv_obj_add_event_cb(btn_rotate, on_rotate_pressed, LV_EVENT_CLICKED, NULL);
   lv_obj_add_event_cb(roll_grp,   on_readout_pressed, LV_EVENT_CLICKED, NULL);
@@ -1162,6 +1289,14 @@ static void update_ui()
   static bool last_frozen = false;
   static float frozen_display_roll = 0.0f;
   static float frozen_display_pitch = 0.0f;
+  static TouchUiLayoutMode last_layout_mode = TOUCH_UI_ADVANCED;
+
+  const TouchUiLayoutMode persisted_layout = getTouchUiLayoutMode();
+  if (persisted_layout != last_layout_mode) {
+    active_touch_ui_layout = persisted_layout;
+    apply_ui_state();
+    last_layout_mode = persisted_layout;
+  }
 
   bool align_active = alignmentIsActive();
   if (align_active != last_align_active) {
@@ -1311,6 +1446,7 @@ void setup_display()
   indev_drv.read_cb = touch_read_cb;
   lv_indev_drv_register(&indev_drv);
 
+  active_touch_ui_layout = getTouchUiLayoutMode();
   create_ui();
   apply_ui_state();
   update_status_label();
@@ -1377,4 +1513,14 @@ void loop_display()
   }
 
   delay(5);
+}
+
+float get_display_roll(void)
+{
+  return ui_roll_smooth;
+}
+
+float get_display_pitch(void)
+{
+  return ui_pitch_smooth;
 }

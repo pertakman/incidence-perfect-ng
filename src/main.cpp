@@ -7,8 +7,8 @@ void loop_inclinometer();
 
 void setup()
 {
-  setup_display();
   setup_inclinometer();
+  setup_display();
   setup_remote_control();
 }
 

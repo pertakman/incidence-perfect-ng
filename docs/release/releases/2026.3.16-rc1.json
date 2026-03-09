@@ -1,0 +1,17 @@
+{
+  "version": "2026.3.16-rc1",
+  "ota_target_version": "2026.3.16",
+  "date": "2026-03-09",
+  "source_commit": "176edd9",
+  "platformio_env": "esp32s3",
+  "artifact": {
+    "path": ".pio/build/esp32s3/firmware.bin",
+    "sha256": "194E941D0D7FDAAD0C259FF3A4BA24FB0790C06A698E9C818FAA821D9221E4D3",
+    "bytes": 1420512
+  },
+  "validation": {
+    "session_template": "docs/testing/validation-session-template.md",
+    "step2_suite": "docs/testing/touch-ui-step2-test-suite.md",
+    "latest_session_log": "docs/testing/session-logs/2026-03-08-validation-session.md"
+  }
+}

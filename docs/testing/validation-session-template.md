@@ -26,6 +26,7 @@ Workflow:
 ## Scope
 
 - Checklist used: `docs/testing/hardware-validation-checklist.md`
+- Step-specific checklist used (if any): `docs/testing/touch-ui-step2-test-suite.md`
 - Tests executed:
 - Optional deep check executed (`Yes`/`No`):
 - STA/hostname coverage executed (`Yes`/`No`):

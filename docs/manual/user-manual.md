@@ -65,6 +65,35 @@ Use freeze when you want to capture a reading without chasing tiny motion.
 - Tap the **readout area** (the roll/pitch values) to toggle `LIVE` / `FROZEN`.
 - When frozen, the displayed values hold steady.
 
+### Touch Layouts: Advanced vs Simple
+
+The device supports two touch layouts:
+
+- **Advanced**: full button row (`ZERO`, `AXIS`, `MODE`, `ALIGN`, `ROTATE`)
+- **Simple**: two large buttons (`ZERO`, `VIEW`)
+
+`VIEW` in **Simple** combines axis and mode control:
+
+- **Tap `VIEW`**: cycle axis scope
+  - `BOTH -> ROLL -> PITCH -> BOTH`
+- **Medium hold `VIEW` then release**: toggle `MODE`
+  - `SCREEN UP` <-> `SCREEN VERTICAL`
+- **Long hold `VIEW` then release**: switch touch layout
+  - `Simple` <-> `Advanced`
+
+In **Advanced**:
+
+- **Tap `MODE`**: toggle orientation mode
+- **Long hold `MODE` then release**: switch touch layout to `Simple`
+
+Tip behavior:
+
+- During hold, the tip line shows what action will happen on release.
+- In `Simple`, `VIEW` tip bands are:
+  - `AXIS` (short hold)
+  - `MODE` (medium hold)
+  - `SWITCH UI` (long hold)
+
 ---
 
 ## 3) ACTION Button (Physical Control)
@@ -198,7 +227,7 @@ What you get in web UI:
 
 - Live `ROLL`/`PITCH` readout with the same status line as the device.
 - Battery status (`BAT/CHG`, percent, and voltage).
-- Normal controls: `ZERO`, `AXIS`, `MODE`, `ALIGN`, `ROTATE`, `FREEZE`, `OFFSET CAL`, `SLEEP`.
+- Normal controls: `FREEZE`, `ZERO`, `OFFSET CAL`, `AXIS`, `MODE`, `ALIGN`, `ROTATE`, `SLEEP`.
 - Context controls only when needed:
   - `CANCEL`/`CONFIRM` during guided `ZERO` and `OFFSET CAL`
   - `CANCEL`/`CAPTURE` during `ALIGN`
@@ -219,11 +248,15 @@ You can update firmware over Wi-Fi from the web page:
 
 1. Open the device web UI (`http://192.168.4.1` in AP mode, or its STA IP/hostname).
 2. Expand `OTA Update`.
-3. Select a firmware `.bin` built for this device/environment.
-4. Enter the target firmware version (`YYYY.M.X`).
-5. Verify SHA-256 (auto-computed in browser).
-6. Tap `Upload & Install`.
-7. Wait for the reboot message, then reconnect and verify firmware version.
+3. Select the release-candidate firmware `.bin` built for `esp32s3`.
+4. Enter the exact target firmware version shown in the release notes (`YYYY.M.X`).
+5. Provide matching SHA-256:
+   - use browser auto-calc if available, or
+   - paste SHA-256 from release notes / local hash command below.
+6. Leave `Force` unchecked for normal updates.
+7. Tap `Upload & Install`.
+8. Wait for reboot, reconnect, and verify the splash-screen firmware version changed to the target version.
+9. If upload is rejected, correct version/SHA and retry (device keeps running current firmware when rejected).
 
 If browser SHA-256 auto-calc is unavailable, compute hash locally and paste it:
 
@@ -242,6 +275,9 @@ Important:
 - OTA safety gates reject packages when:
   - target version is not newer than current version (unless `force` is enabled),
   - uploaded file hash does not match the provided SHA-256.
+- For release testing, always verify both:
+  - positive path: valid newer version + matching SHA succeeds,
+  - negative path: same-version (without `force`) or wrong SHA is rejected.
 
 ### Network Recovery
 

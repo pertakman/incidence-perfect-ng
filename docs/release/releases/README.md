@@ -12,3 +12,4 @@ Current releases:
 
 - `2026.3.9-beta1`
 - `2026.3.13-beta2`
+- `2026.3.16-rc1`

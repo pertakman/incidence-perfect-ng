@@ -18,10 +18,19 @@ enum AxisDisplayMode {
   AXIS_PITCH = 2
 };
 
+enum TouchUiLayoutMode {
+  TOUCH_UI_ADVANCED = 0,
+  TOUCH_UI_SIMPLE = 1
+};
+
 extern OrientationMode orientationMode;
 extern bool displayRotated;
 extern volatile AxisDisplayMode ui_axis_mode;
+extern volatile TouchUiLayoutMode touchUiLayoutMode;
 AxisDisplayMode getAxisMode(void);
+void setAxisDisplayMode(AxisDisplayMode mode);
+TouchUiLayoutMode getTouchUiLayoutMode(void);
+void setTouchUiLayoutMode(TouchUiLayoutMode mode);
 
 struct ImuDiagnosticsSample {
   bool valid;

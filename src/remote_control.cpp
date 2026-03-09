@@ -11,6 +11,7 @@
 
 #include "fw_version.h"
 #include "inclinometer_shared.h"
+#include "ui_lvgl.h"
 
 namespace {
 
@@ -172,13 +173,13 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
 
   <div class="card">
     <div id="normalControls" class="row">
+      <button onclick="sendCmd('freeze')">FREEZE</button>
       <button onclick="sendCmd('zero')">ZERO</button>
+      <button onclick="sendCmd('offset_cal')">OFFSET CAL</button>
       <button onclick="sendCmd('axis')">AXIS</button>
       <button onclick="sendCmd('mode_toggle')">MODE</button>
       <button onclick="sendCmd('align_start')">ALIGN</button>
       <button onclick="sendCmd('rotate')">ROTATE</button>
-      <button onclick="sendCmd('freeze')">FREEZE</button>
-      <button onclick="sendCmd('offset_cal')">OFFSET CAL</button>
       <button onclick="sendCmd('sleep')">SLEEP</button>
     </div>
     <div id="modeControls" class="row hidden" style="margin-top:10px;">
@@ -1406,8 +1407,8 @@ void handle_live() {
   json_escape_copy(axis_esc, sizeof(axis_esc), axis_text());
   json_escape_copy(live_esc, sizeof(live_esc), measurementIsFrozen() ? "FROZEN" : "LIVE");
 
-  const float roll = ui_roll;
-  const float pitch = ui_pitch;
+  const float roll = get_display_roll();
+  const float pitch = get_display_pitch();
   const float roll_cond_pct = rollConditionPercent();
   const bool roll_cond_low = rollConditionIsLow();
   BatteryTelemetry battery = {};
@@ -1471,8 +1472,8 @@ void handle_state() {
   const float align_capture_pct = alignmentCaptureProgressPercent();
   const float roll_cond_pct = rollConditionPercent();
   const bool roll_cond_low = rollConditionIsLow();
-  const float roll = ui_roll;
-  const float pitch = ui_pitch;
+  const float roll = get_display_roll();
+  const float pitch = get_display_pitch();
   BatteryTelemetry battery = {};
   getBatteryTelemetry(&battery);
 

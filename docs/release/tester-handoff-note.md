@@ -34,6 +34,22 @@ Collect real-world usability and reliability feedback across touch UI, ACTION bu
   - ALIGN: short = capture
 - Serial (optional): `z`, `a`, `m`, `u`, `v`, `C`, `o`, `c`, `y`, `p`, `x`
 
+## OTA Quick Steps (Web UI)
+
+1. Connect to device AP and open `http://192.168.4.1`.
+2. Expand `OTA Update`.
+3. Select the provided release-candidate `.bin` (ESP32-S3 build).
+4. Enter the target firmware version exactly (`YYYY.M.X`).
+5. Enter matching SHA-256 (from release note or local hash command).
+6. Keep `Force` unchecked for normal update.
+7. Tap `Upload & Install`, wait for reboot, reconnect, and confirm splash version.
+
+Expected safety-gate behavior:
+
+- Same-version upload without `Force` must be rejected.
+- Wrong SHA-256 must be rejected.
+- On reject, current firmware stays running.
+
 ## Known Notes To Keep In Mind
 
 - Roll conditioning is intentionally reduced near high pitch angles (around `|pitch| > 80 deg`).
