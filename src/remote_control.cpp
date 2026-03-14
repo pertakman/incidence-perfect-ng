@@ -5,12 +5,12 @@
 #include <Preferences.h>
 #include <ESPmDNS.h>
 #include <Update.h>
-#include <ctype.h>
 #include <mbedtls/sha256.h>
 #include <string.h>
 
 #include "fw_version.h"
 #include "inclinometer_shared.h"
+#include "remote_protocol_utils.h"
 #include "ui_lvgl.h"
 
 namespace {
@@ -958,68 +958,19 @@ void sanitize_hostname(const String &raw, char *dst, size_t dst_size) {
 }
 
 bool parse_bool_flag(const String &raw) {
-  String s = raw;
-  s.trim();
-  s.toLowerCase();
-  return (s == "1" || s == "true" || s == "yes" || s == "on");
+  return parse_bool_flag_text(raw.c_str());
 }
 
 bool normalize_sha256_hex(const String &raw, char *dst, size_t dst_size) {
-  if (!dst || dst_size < 65) return false;
-  String s = raw;
-  s.trim();
-  s.toLowerCase();
-  if (s.length() != 64) return false;
-  for (int i = 0; i < 64; ++i) {
-    const char c = s[i];
-    const bool hex = (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
-    if (!hex) return false;
-    dst[i] = c;
-  }
-  dst[64] = '\0';
-  return true;
+  return normalize_sha256_hex_text(raw.c_str(), dst, dst_size);
 }
 
 bool parse_version_triplet(const char *src, int &year, int &minor, int &patch) {
-  if (!src || src[0] == '\0') return false;
-  const char *p = src;
-
-  auto parse_uint = [&](int &out) -> bool {
-    if (!isdigit((unsigned char)*p)) return false;
-    long v = 0;
-    while (isdigit((unsigned char)*p)) {
-      v = (v * 10L) + (long)(*p - '0');
-      if (v > 99999L) return false;
-      ++p;
-    }
-    out = (int)v;
-    return true;
-  };
-
-  if (!parse_uint(year)) return false;
-  if (*p != '.') return false;
-  ++p;
-  if (!parse_uint(minor)) return false;
-  if (*p != '.') return false;
-  ++p;
-  if (!parse_uint(patch)) return false;
-  return true; // allow optional suffix after numeric triplet
+  return parse_version_triplet_text(src, year, minor, patch);
 }
 
 int compare_version_triplet(const char *lhs, const char *rhs, bool *ok = nullptr) {
-  int ly = 0, lm = 0, lp = 0;
-  int ry = 0, rm = 0, rp = 0;
-  const bool lhs_ok = parse_version_triplet(lhs, ly, lm, lp);
-  const bool rhs_ok = parse_version_triplet(rhs, ry, rm, rp);
-  if (!lhs_ok || !rhs_ok) {
-    if (ok) *ok = false;
-    return 0;
-  }
-  if (ok) *ok = true;
-  if (ly != ry) return (ly > ry) ? 1 : -1;
-  if (lm != rm) return (lm > rm) ? 1 : -1;
-  if (lp != rp) return (lp > rp) ? 1 : -1;
-  return 0;
+  return compare_version_triplet_text(lhs, rhs, ok);
 }
 
 void bytes_to_hex_lower(const uint8_t *bytes, size_t bytes_len, char *dst, size_t dst_size) {
@@ -1601,32 +1552,15 @@ void handle_state() {
 }
 
 String read_cmd_from_request() {
-  auto decode_body = [](const String &body) -> String {
-    if (body.indexOf("zero") >= 0) return String("zero");
-    if (body.indexOf("axis") >= 0) return String("axis");
-    if (body.indexOf("freeze") >= 0) return String("freeze");
-    if (body.indexOf("sleep") >= 0) return String("sleep");
-    if (body.indexOf("offset_cal") >= 0) return String("offset_cal");
-    if (body.indexOf("rotate") >= 0) return String("rotate");
-    if (body.indexOf("mode_toggle") >= 0) return String("mode_toggle");
-    if (body.indexOf("mode_up") >= 0) return String("mode_up");
-    if (body.indexOf("mode_vertical") >= 0) return String("mode_vertical");
-    if (body.indexOf("align_start") >= 0) return String("align_start");
-    if (body.indexOf("capture") >= 0) return String("capture");
-    if (body.indexOf("confirm") >= 0) return String("confirm");
-    if (body.indexOf("cancel") >= 0) return String("cancel");
-    return String("");
-  };
-
   if (server.hasArg("plain")) {
     const String body = server.arg("plain");
-    const String decoded = decode_body(body);
-    if (decoded.length() > 0) return decoded;
+    const RemoteCommandId decoded = decode_remote_command(body.c_str());
+    if (decoded != REMOTE_CMD_NONE) return String(remote_command_text(decoded));
   }
   if (server.hasArg("cmd")) {
     const String body = server.arg("cmd");
-    const String decoded = decode_body(body);
-    if (decoded.length() > 0) return decoded;
+    const RemoteCommandId decoded = decode_remote_command(body.c_str());
+    if (decoded != REMOTE_CMD_NONE) return String(remote_command_text(decoded));
     return body;
   }
   return String("");

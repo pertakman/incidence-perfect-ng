@@ -106,7 +106,6 @@ static void show_startup_splash()
 typedef enum {
   UI_STATE_NORMAL,
   UI_STATE_ALIGN,
-  UI_STATE_MODE,
   UI_STATE_ZERO,
   UI_STATE_OFFSET_CAL
 } ui_state_t;
@@ -215,11 +214,6 @@ static const char *orientation_text_for(OrientationMode m)
 static const char *orientation_instruction_text_for(OrientationMode m)
 {
   return (m == MODE_SCREEN_VERTICAL) ? "screen vertically" : "screen facing up";
-}
-
-static void process_mode_pending()
-{
-  // MODE workflow is owned by inclinometer.cpp and mirrored here.
 }
 
 static void update_status_label()
@@ -353,38 +347,7 @@ static void update_boot_hint_label()
     progress_pct = pct;
   }
 
-  if (ui_state == UI_STATE_MODE) {
-    const char *target_text = orientation_instruction_text_for(modeWorkflowTarget());
-    if (!modeWorkflowIsConfirmed()) {
-      if (bootHoldIsActive()) {
-        const unsigned long hold_ms = bootHoldDurationMs();
-        if (hold_ms < 1200) {
-          const float to_cancel = countdown_display_seconds((1200 - hold_ms) / 1000.0f);
-          snprintf(buf, sizeof(buf),
-                   "ACTION: release = CONFIRM | CANCEL in %.1f s",
-                   to_cancel);
-          progress_pct = (int)((hold_ms * 100UL) / 1200UL);
-        } else {
-          snprintf(buf, sizeof(buf), "ACTION: release = CANCEL");
-          progress_pct = 100;
-        }
-      } else {
-        snprintf(buf, sizeof(buf), "Reposition with %s", target_text);
-      }
-    } else {
-      const float rem = modeWorkflowRemainingSeconds();
-      // Flip to "Applying..." a tick before zero to avoid a stale final
-      // countdown frame when the action completion is in-flight.
-      if (rem > 0.10f) {
-        const float rem_show = countdown_display_seconds(rem);
-        snprintf(buf, sizeof(buf), "Hold still %.1f s", rem_show);
-        progress_pct = (int)modeWorkflowProgressPercent();
-      } else {
-        snprintf(buf, sizeof(buf), "Applying...");
-        progress_pct = 100;
-      }
-    }
-  } else if (zeroWorkflowIsActive()) {
+  if (zeroWorkflowIsActive()) {
     if (!zeroWorkflowIsConfirmed()) {
       if (bootHoldIsActive()) {
         const unsigned long hold_ms = bootHoldDurationMs();
@@ -716,24 +679,6 @@ static void apply_ui_state()
       lv_obj_clear_state(btn_align, LV_STATE_DISABLED);
       break;
 
-    case UI_STATE_MODE:
-      lv_obj_clear_flag(label_mode, LV_OBJ_FLAG_HIDDEN);
-      lv_obj_add_flag(label_header, LV_OBJ_FLAG_HIDDEN);
-      lv_obj_add_flag(instr_grp, LV_OBJ_FLAG_HIDDEN);
-
-      lv_label_set_text(label_btn_zero, "CANCEL");
-      lv_label_set_text(label_btn_mode, "CONFIRM");
-      lv_label_set_text(label_btn_align, "ALIGN");
-      apply_action_label_font(true, false);
-
-      lv_obj_add_state(btn_axis,   LV_STATE_DISABLED);
-      lv_obj_add_state(btn_align,  LV_STATE_DISABLED);
-      lv_obj_add_state(btn_rotate, LV_STATE_DISABLED);
-      lv_obj_clear_state(btn_mode, LV_STATE_DISABLED);
-
-      apply_axis_layout();
-      break;
-
     case UI_STATE_ZERO:
       lv_obj_clear_flag(label_mode, LV_OBJ_FLAG_HIDDEN);
       lv_obj_add_flag(label_header, LV_OBJ_FLAG_HIDDEN);
@@ -812,11 +757,6 @@ static void on_zero_pressed(lv_event_t *)
     return;
   }
 
-  if (ui_state == UI_STATE_MODE) {
-    modeWorkflowCancel();
-    ui_set_state(UI_STATE_NORMAL);
-    return;
-  }
   if (ui_state == UI_STATE_ZERO) {
     zeroWorkflowCancel();
     ui_set_state(UI_STATE_NORMAL);
@@ -878,8 +818,6 @@ static void handle_mode_tap_action(void)
     }
     return;
   }
-
-  if (ui_state != UI_STATE_MODE) return;
 }
 
 static void on_mode_pressed(lv_event_t *)
@@ -1305,22 +1243,14 @@ static void update_ui()
   }
 
   if (!align_active) {
-    const bool mode_active = modeWorkflowIsActive();
     const bool zero_active = zeroWorkflowIsActive();
     const bool offset_cal_active = offsetCalibrationWorkflowIsActive();
-    if (mode_active && ui_state != UI_STATE_MODE) {
-      ui_set_state(UI_STATE_MODE);
-    } else if (!mode_active && ui_state == UI_STATE_MODE) {
+    if (zero_active && ui_state != UI_STATE_ZERO) {
+      ui_set_state(UI_STATE_ZERO);
+    } else if (!zero_active && ui_state == UI_STATE_ZERO) {
       ui_set_state(UI_STATE_NORMAL);
     }
-    if (!mode_active) {
-      if (zero_active && ui_state != UI_STATE_ZERO) {
-        ui_set_state(UI_STATE_ZERO);
-      } else if (!zero_active && ui_state == UI_STATE_ZERO) {
-        ui_set_state(UI_STATE_NORMAL);
-      }
-    }
-    if (!mode_active && !zero_active) {
+    if (!zero_active) {
       if (offset_cal_active && ui_state != UI_STATE_OFFSET_CAL) {
         ui_set_state(UI_STATE_OFFSET_CAL);
       } else if (!offset_cal_active && ui_state == UI_STATE_OFFSET_CAL) {
@@ -1345,7 +1275,6 @@ static void update_ui()
   }
   last_frozen = frozen;
 
-  process_mode_pending();
   update_status_label();
   update_battery_label();
 

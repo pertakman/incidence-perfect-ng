@@ -22,6 +22,17 @@ This repo is now configured as a PlatformIO project for VS Code.
    - PlatformIO sidebar -> `Monitor`
    - or terminal: `pio device monitor -b 115200`
 
+## Regression Checks
+
+- Firmware build:
+  - `platformio run -e esp32s3`
+- Host-side parser/version regression tests:
+  - `platformio test -e native`
+
+Native test note:
+- The `native` test environment compiles `src/remote_protocol_utils.cpp` and requires a host C/C++ compiler on `PATH` (`g++`, `clang++`, or equivalent toolchain support on Windows).
+- The firmware build does not depend on the host compiler.
+
 ## Required Dependencies And Tooling
 
 Firmware build/runtime dependencies:
@@ -31,11 +42,15 @@ Firmware build/runtime dependencies:
 - Libraries from `platformio.ini`:
   - `lvgl/lvgl @ ^8.4.0`
   - `moononournation/GFX Library for Arduino @ 1.3.8`
-  - `QMI8658` from local path: `file://C:/dev/Arduino/Libraries/QMI8658`
+  - `QMI8658` from a local checkout discovered by `scripts/configure_qmi8658_lib.py`
 
 Important local dependency note:
-- This project currently expects `QMI8658` at `C:/dev/Arduino/Libraries/QMI8658`.
-- If your path differs, update `lib_deps` in `platformio.ini` accordingly.
+- `QMI8658` is resolved in this order:
+  - `QMI8658_LIB_PATH` environment variable
+  - repo-local `lib/QMI8658`
+  - `C:/dev/Arduino/Libraries/QMI8658`
+  - `~/Documents/Arduino/libraries/QMI8658`
+- If your checkout lives elsewhere, set `QMI8658_LIB_PATH` before building.
 
 Optional documentation/splash tooling:
 - `PowerShell` (used for helper scripts in `scripts/`)
@@ -325,9 +340,8 @@ Examples:
 5. OTA update exploration (installation-base maintenance)
 - Status: In progress
 - Remaining:
-  - Add OTA validation matrix coverage for safety gates (checksum mismatch, stale version reject, force mode).
-  - Add signed-manifest verification (beyond checksum) if threat model requires it.
   - Add interrupted-update behavior verification (network loss, power-loss during update).
+  - Add signed-manifest verification (beyond checksum) if threat model requires it.
 
 ## Completed Milestones
 

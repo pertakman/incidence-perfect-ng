@@ -123,12 +123,6 @@ static const unsigned long bootBtnVeryLongPressMs = 2200;
 static const unsigned long bootBtnUltraLongPressMs = 3200;
 static const unsigned long bootBtnSleepPressMs = 5000;
 static const unsigned long bootBtnSleepReleaseGuardMs = 250;
-static bool modePending = false;
-static bool modeConfirmed = false;
-static OrientationMode modeTargetState = MODE_SCREEN_UP;
-static unsigned long modeStartMs = 0;
-static float modeRefRoll = 0.0f;
-static float modeRefPitch = 0.0f;
 static const unsigned long modeStillMs = 1500;
 static const float modeMotionThreshDeg = 0.8f;
 static bool offsetCalPending = false;
@@ -277,7 +271,6 @@ const char *alignmentStepHintText(AlignmentStep step);
 void printAlignmentInstruction();
 void finalizeAlignment();
 void handleBootButton();
-void processModeWorkflow();
 void processAlignmentCapture();
 void processOffsetCalibrationWorkflow();
 void processZeroWorkflow();
@@ -725,7 +718,6 @@ void loop_inclinometer() {
     p = freeze_pitch;
   }
 
-  processModeWorkflow();
   processZeroWorkflow();
   processOffsetCalibrationWorkflow();
   processAlignmentCapture();
@@ -739,7 +731,7 @@ void loop_inclinometer() {
     }
   } else if (!serialOutputPaused &&
              !alignmentIsActive() &&
-             !modePending &&
+             !modeWorkflowIsActive() &&
              !zeroPending &&
              !offsetCalPending) {
     switch (ui_axis_mode) {
@@ -805,10 +797,7 @@ void handleSerial() {
       serialContextAction();
       break;
     case 'y':
-      if (modePending && !modeConfirmed) {
-        Serial.println("Serial 'y': CONFIRM mode workflow");
-        modeWorkflowConfirm();
-      } else if (zeroPending && !zeroConfirmed) {
+      if (zeroPending && !zeroConfirmed) {
         Serial.println("Serial 'y': CONFIRM zero workflow");
         zeroWorkflowConfirm();
       } else if (offsetCalPending && !offsetCalConfirmed) {
@@ -879,9 +868,6 @@ void serialContextAction() {
   if (alignmentIsActive()) {
     Serial.println("Serial 'c': CAPTURE");
     alignmentCapture();
-  } else if (modePending && !modeConfirmed) {
-    Serial.println("Serial 'c': CONFIRM mode workflow");
-    modeWorkflowConfirm();
   } else if (zeroPending && !zeroConfirmed) {
     Serial.println("Serial 'c': CONFIRM zero workflow");
     zeroWorkflowConfirm();
@@ -956,7 +942,7 @@ void printRuntimeStatus() {
   Serial.print("OFFSET_CAL=");
   Serial.print(offsetCalPending ? "Y" : "N");
   Serial.print(" MODE=");
-  Serial.print(modePending ? "Y" : "N");
+  Serial.print(modeWorkflowIsActive() ? "Y" : "N");
   Serial.print(" ALIGN=");
   Serial.println(alignState.active ? "Y" : "N");
   Serial.print("Bias offsets (ax,ay,az,gx,gy): ");
@@ -1486,9 +1472,6 @@ void alignmentCancel(void) {
 void modeWorkflowStart(OrientationMode target) {
   zeroWorkflowCancel();
   offsetCalibrationWorkflowCancel();
-  modePending = false;
-  modeConfirmed = false;
-  modeTargetState = target;
   setOrientation(target);
   Serial.println("Mode change complete");
 }
@@ -1500,32 +1483,23 @@ void modeWorkflowStartToggle(void) {
 }
 
 void modeWorkflowConfirm() {
-  // MODE is immediate in current UX; confirm kept as a no-op for compatibility.
-  (void)modePending;
-  (void)modeConfirmed;
+  // MODE is immediate in current UX; confirm remains a compatibility no-op.
 }
 
 void modeWorkflowCancel() {
-  if (!modePending) return;
-  modePending = false;
-  modeConfirmed = false;
-  Serial.println("Mode change canceled");
-}
-
-void processModeWorkflow() {
-  // MODE is immediate; no async workflow processing required.
+  // MODE is immediate in current UX; cancel remains a compatibility no-op.
 }
 
 bool modeWorkflowIsActive(void) {
-  return modePending;
+  return false;
 }
 
 bool modeWorkflowIsConfirmed(void) {
-  return modeConfirmed;
+  return false;
 }
 
 OrientationMode modeWorkflowTarget(void) {
-  return modeTargetState;
+  return orientationMode;
 }
 
 float modeWorkflowRemainingSeconds(void) {
