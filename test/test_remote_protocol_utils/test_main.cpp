@@ -2,6 +2,9 @@
 
 #include "remote_protocol_utils.h"
 
+void setUp(void) {}
+void tearDown(void) {}
+
 void test_parse_bool_flag_text_accepts_common_true_values() {
   TEST_ASSERT_TRUE(parse_bool_flag_text("1"));
   TEST_ASSERT_TRUE(parse_bool_flag_text(" true "));
