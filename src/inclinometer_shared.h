@@ -103,6 +103,8 @@ bool rollConditionIsLow(void);
 void getBatteryTelemetry(BatteryTelemetry *out_telemetry);
 BatteryPresenceMode getBatteryPresenceMode(void);
 void setBatteryPresenceMode(BatteryPresenceMode mode);
+bool getAutoZeroOnBootEnabled(void);
+void setAutoZeroOnBootEnabled(bool enabled);
 void requestDeepSleep(void);
 bool bootHoldIsActive(void);
 unsigned long bootHoldDurationMs(void);

@@ -10,6 +10,8 @@
 
 - Connect the device over USB power.
 - On boot you'll see the splash screen with the firmware version in the lower-right.
+- If the UI was previously set to `ROT 180`, the splash screen follows that stored orientation.
+- If `Startup ZERO` is enabled, the device begins guided ZERO automatically on cold boot.
 - After boot, the live readout screen appears (roll/pitch).
 
 ### What You're Looking At
@@ -57,6 +59,7 @@ Use when the device is physically hard to read and you want to flip the UI.
 
 - Tap `ROTATE` to toggle `ROT 0` / `ROT 180`.
 - Rotation persists after reboot.
+- The boot splash follows the same stored rotation.
 
 ### Freeze / Unfreeze
 
@@ -241,6 +244,11 @@ What you get in web UI:
   - corrected vectors
   - physics angles + conditioning
   - calibration references (bias/zero/align)
+- Network settings for:
+  - Wi-Fi mode (`AP only` / `STA with AP fallback`)
+  - hostname
+  - battery indicator behavior
+  - `Startup ZERO` on cold boot
 
 ### OTA Update from Web UI
 
@@ -293,6 +301,9 @@ Battery note:
   - `Auto detect` (heuristic/default)
   - `Installed` (force battery-present UI semantics)
   - `No battery installed` (hide battery indicators in both web and touch UI)
+- In the same `Network` settings, `Startup ZERO` can be set to:
+  - `Enabled` (default; guided ZERO starts automatically on cold boot)
+  - `Disabled` (keep the saved zero reference until you explicitly run ZERO)
 - Current charging state is inferred from battery-voltage trend in firmware.
 - The web/API exposes this via `battery_charging_inferred`.
 - Battery-pack presence is best-effort on this hardware; when firmware suspects "USB powered, no pack", web/API reports `battery_present=false` with `battery_present_inferred=true`.

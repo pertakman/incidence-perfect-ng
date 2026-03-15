@@ -1,0 +1,17 @@
+{
+  "version": "2026.3.22-rc3",
+  "ota_target_version": "2026.3.22",
+  "date": "2026-03-15",
+  "source_commit": "(tag commit)",
+  "platformio_env": "esp32s3",
+  "supersedes": "2026.3.18-rc2",
+  "artifact": {
+    "path": ".pio/build/esp32s3/firmware.bin",
+    "sha256": "02EDF2A386A3EF2E19DE3AD476A5492570F6A96CAFB6AD9838E1308BDBADEFDF",
+    "bytes": 1421072
+  },
+  "validation": {
+    "session_template": "docs/testing/validation-session-template.md",
+    "checklist": "docs/testing/hardware-validation-checklist.md"
+  }
+}

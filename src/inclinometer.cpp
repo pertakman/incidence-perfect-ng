@@ -65,6 +65,7 @@
 #define EEPROM_ADDR_ZERO_VERT        96   // stores: roll_zero, pitch_zero (floats)
 #define EEPROM_ADDR_TOUCH_UI_LAYOUT  104
 #define EEPROM_ADDR_AXIS_MODE        105
+#define EEPROM_ADDR_AUTO_ZERO_BOOT   106
 static const uint32_t EEPROM_BIAS_MAGIC = 0x42534131UL; // "BSA1"
 static const uint32_t EEPROM_ZERO_MAGIC = 0x5A455231UL; // "ZER1"
 
@@ -88,6 +89,7 @@ QMI8658 imu;
 OrientationMode orientationMode;
 bool displayRotated = false;
 volatile TouchUiLayoutMode touchUiLayoutMode = TOUCH_UI_ADVANCED;
+static bool autoZeroOnBootEnabled = true;
 static bool freezeActive = false;
 static float freeze_roll = 0.0f;
 static float freeze_pitch = 0.0f;
@@ -274,6 +276,7 @@ void handleBootButton();
 void processAlignmentCapture();
 void processOffsetCalibrationWorkflow();
 void processZeroWorkflow();
+void beginZeroWorkflow(bool auto_confirm, const char *context);
 const char *sleepWakeCauseText(esp_sleep_wakeup_cause_t cause);
 void enterDeepSleep();
 void offsetCalibrationWorkflowStart();
@@ -579,6 +582,8 @@ void setup_inclinometer() {
   ui_axis_mode = (axis_raw <= (uint8_t)AXIS_PITCH) ? (AxisDisplayMode)axis_raw : AXIS_BOTH;
   const uint8_t layout_raw = EEPROM.read(EEPROM_ADDR_TOUCH_UI_LAYOUT);
   touchUiLayoutMode = (layout_raw == (uint8_t)TOUCH_UI_SIMPLE) ? TOUCH_UI_SIMPLE : TOUCH_UI_ADVANCED;
+  const uint8_t auto_zero_raw = EEPROM.read(EEPROM_ADDR_AUTO_ZERO_BOOT);
+  autoZeroOnBootEnabled = (auto_zero_raw != 0);
   EEPROM.get(EEPROM_ADDR_ALIGN,     align_roll);
   EEPROM.get(EEPROM_ADDR_ALIGN + 4, align_pitch);
 
@@ -617,6 +622,12 @@ void setup_inclinometer() {
     Serial.println("Loaded zero reference from EEPROM");
   }
   initializeAngles();
+
+  if (autoZeroOnBootEnabled &&
+      wakeCause == ESP_SLEEP_WAKEUP_UNDEFINED &&
+      digitalRead(BOOT_BUTTON_PIN) != LOW) {
+    beginZeroWorkflow(true, "startup");
+  }
 
   printMode();
   serialWasAttached = (bool)Serial;
@@ -1184,7 +1195,7 @@ void setZeroReference() {
   saveZeroReferenceToEeprom(orientationMode);
 }
 
-void zeroWorkflowStart(void) {
+void beginZeroWorkflow(bool auto_confirm, const char *context) {
   if (alignmentIsActive()) {
     Serial.println("Zero blocked: ALIGN active");
     return;
@@ -1192,17 +1203,36 @@ void zeroWorkflowStart(void) {
   modeWorkflowCancel();
   offsetCalibrationWorkflowCancel();
   zeroPending = true;
-  zeroConfirmed = false;
+  zeroConfirmed = auto_confirm;
   zeroSampling = false;
   zeroSampleCount = 0;
   zeroSumRoll = 0.0f;
   zeroSumPitch = 0.0f;
+
+  if (auto_confirm) {
+    zeroStartMs = millis();
+    zeroRefRoll = roll_phys + align_roll;
+    zeroRefPitch = pitch_phys + align_pitch;
+    Serial.println();
+    Serial.print("Zero workflow auto-started");
+    if (context && context[0] != '\0') {
+      Serial.print(" (");
+      Serial.print(context);
+      Serial.print(")");
+    }
+    Serial.println(". Hold still...");
+    return;
+  }
 
   Serial.println();
   Serial.println("Zero workflow");
   Serial.println("Press CONFIRM and hold still");
   Serial.println("Send 'c' to CONFIRM, 'x' to cancel");
   Serial.println("Tip: ACTION short=CONFIRM, long=CANCEL");
+}
+
+void zeroWorkflowStart(void) {
+  beginZeroWorkflow(false, nullptr);
 }
 
 void zeroWorkflowConfirm(void) {
@@ -1708,6 +1738,18 @@ void setBatteryPresenceMode(BatteryPresenceMode mode) {
     return;
   }
   batteryPresenceMode = mode;
+}
+
+bool getAutoZeroOnBootEnabled(void) {
+  return autoZeroOnBootEnabled;
+}
+
+void setAutoZeroOnBootEnabled(bool enabled) {
+  autoZeroOnBootEnabled = enabled;
+  EEPROM.write(EEPROM_ADDR_AUTO_ZERO_BOOT, enabled ? 1 : 0);
+  EEPROM.commit();
+  Serial.print("Startup ZERO: ");
+  Serial.println(enabled ? "ON" : "OFF");
 }
 
 void requestDeepSleep(void) {

@@ -35,6 +35,7 @@ LV_FONT_DECLARE(lv_font_montserrat_56_num);
 #define LCD_D1   7
 #define LCD_D2   48
 #define LCD_D3   5
+#define LCD_BASE_ROTATION 3
 
 // ============================================================
 // DISPLAY DRIVER
@@ -47,7 +48,7 @@ Arduino_DataBus *bus = new Arduino_ESP32QSPI(
 Arduino_GFX *gfx = new Arduino_RM67162(
   bus,
   LCD_RST,
-  3,
+  LCD_BASE_ROTATION,
   false
 );
 
@@ -78,6 +79,9 @@ static const uint32_t panelDeepSleepBeginRetryCount = 5;
 
 static void show_startup_splash()
 {
+  const uint8_t splash_rotation =
+    displayRotated ? ((LCD_BASE_ROTATION + 2) % 4) : LCD_BASE_ROTATION;
+  gfx->setRotation(splash_rotation);
   gfx->draw16bitRGBBitmap(0, 0, (uint16_t *)SPLASH_IMAGE_536x240_RGB565, LCD_WIDTH, LCD_HEIGHT);
 
   const int text_size = 2;
@@ -95,6 +99,7 @@ static void show_startup_splash()
   gfx->setTextColor(0xFFFF);
   gfx->setCursor(text_x, text_y);
   gfx->print(FW_VERSION);
+  gfx->setRotation(LCD_BASE_ROTATION);
 
   delay(splashShowDurationMs);
 }

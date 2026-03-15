@@ -17,9 +17,11 @@ Use this checklist before delivering firmware to external beta testers.
 ## 3) Functional Validation (Per Unit)
 
 - [ ] `ZERO` applies and readings stabilize.
+- [ ] `Startup ZERO` behaves as configured on cold boot (`Enabled` / `Disabled`).
 - [ ] `AXIS` cycles `BOTH -> ROLL -> PITCH`.
-- [ ] `MODE` workflow works from touch, serial, and ACTION-button interactions.
+- [ ] `MODE` toggle works from touch, serial, web, and ACTION-button interactions.
 - [ ] `ROTATE` toggles 180 degrees and persists over reboot.
+- [ ] Boot splash follows stored rotation on both `ROT 0` and `ROT 180`.
 - [ ] `ALIGN` 6-step capture flow completes (touch + ACTION-button capture).
 - [ ] Freeze toggle works from touch readout and ACTION-button short press.
 - [ ] Serial and on-screen workflows stay synchronized.

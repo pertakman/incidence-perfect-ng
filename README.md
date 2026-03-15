@@ -120,6 +120,8 @@ Touch UI, serial, ACTION button, and web share the same ZERO/OFFSET CAL/ALIGN st
   - Tap the roll/pitch value area to toggle freeze (`LIVE` <-> `FROZEN`)
 - UI behavior:
   - `ZERO` is guided (`CONFIRM`/`CANCEL`, stillness timer + averaging progress bar).
+  - Startup splash follows the stored `ROTATE` orientation.
+  - Startup ZERO is enabled by default on cold boot and can be disabled from the web `Network` panel.
   - `ZERO` long press starts OFFSET CAL workflow.
   - Button touch targets are extended to improve tap reliability.
   - `MODE` is immediate (loads mode-specific calibration/zero settings from EEPROM).
@@ -162,6 +164,7 @@ Available in Phase A:
   - live offset/zero/alignment references and workflow flags
 - Network panel:
   - switch between `AP only` and `STA with AP fallback`
+  - toggle startup ZERO on/off
   - set STA SSID/password
   - set custom hostname (`<your-hostname>.local`) for multi-unit deployments
 - OTA panel:
@@ -204,7 +207,7 @@ API endpoints:
   - `{"cmd":"mode_toggle"|"mode_up"|"mode_vertical"}`
   - `{"cmd":"align_start"|"capture"|"cancel"}`
 - `GET /api/network` (network config + runtime status)
-- `POST /api/network` (`mode`, `ssid`, `password`, `hostname`)
+- `POST /api/network` (`mode`, `battery_mode`, `zero_on_boot`, `ssid`, `password`, `hostname`)
 - `POST /api/network/recover` (`wipe=1` clears saved STA creds and forces AP-only mode)
 - `POST /api/ota/upload?version=YYYY.M.X&sha256=<64hex>&force=0|1` (multipart firmware upload)
 - `GET /health`

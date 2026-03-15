@@ -76,6 +76,9 @@ Use this checklist against the current firmware build to establish a known-good 
 | T55 | In web `Network` set `Battery = No battery installed`, save, then refresh | Selection persists and web/touch battery indicators are hidden |  |  |
 | T56 | Power cycle after T55 | `Battery = No battery installed` persists and battery indicators remain hidden |  |  |
 | T57 | Set `Battery = Auto detect` or `Installed`, save | Battery indicators return in web/touch UI as configured |  |  |
+| T58 | Rotate UI 180 deg, then cold-boot the board | Splash screen and firmware version overlay appear in the stored orientation |  |  |
+| T59 | With `Startup ZERO = Enabled`, cold-boot on a stable surface | Device enters startup ZERO automatically and settles near `+0.00 deg` without manual confirm |  |  |
+| T60 | Set `Startup ZERO = Disabled`, cold-boot the board | No startup ZERO workflow runs; saved zero reference remains in effect |  |  |
 
 ## Optional Deep Check (Serial Alignment Flow)
 

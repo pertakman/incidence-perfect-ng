@@ -218,6 +218,13 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
           <option value="absent">No battery installed</option>
         </select>
       </label>
+      <label style="min-width:170px;">
+        <div class="muted" style="margin:0 0 4px 0;">Startup ZERO</div>
+        <select id="netZeroOnBoot">
+          <option value="on">Enabled</option>
+          <option value="off">Disabled</option>
+        </select>
+      </label>
       <label style="flex:1; min-width:180px;">
         <div class="muted" style="margin:0 0 4px 0;">Hostname</div>
         <input id="netHostname" type="text" placeholder="incidence-perfect-ng" maxlength="32">
@@ -234,7 +241,7 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
       </label>
     </div>
     <div class="row" style="margin-top:10px;">
-      <button id="netSaveBtn" onclick="saveNetwork()">Save Network</button>
+      <button id="netSaveBtn" onclick="saveNetwork()">Save</button>
       <button id="netRecoverBtn" onclick="recoverNetwork()">Recover AP Mode</button>
     </div>
     <div id="netMsg" class="muted" style="margin-top:8px;"></div>
@@ -328,6 +335,7 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
     const netAddrEl = document.getElementById('netAddr');
     const netModeEl = document.getElementById('netMode');
     const netBatteryModeEl = document.getElementById('netBatteryMode');
+    const netZeroOnBootEl = document.getElementById('netZeroOnBoot');
     const netHostnameEl = document.getElementById('netHostname');
     const netSsidEl = document.getElementById('netSsid');
     const netPasswordEl = document.getElementById('netPassword');
@@ -360,7 +368,7 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
     let networkFormDirty = false;
     let otaUploadInFlight = false;
 
-    [netModeEl, netBatteryModeEl, netHostnameEl, netSsidEl, netPasswordEl].forEach((el) => {
+    [netModeEl, netBatteryModeEl, netZeroOnBootEl, netHostnameEl, netSsidEl, netPasswordEl].forEach((el) => {
       el.addEventListener('input', () => { networkFormDirty = true; });
     });
     otaFileEl.addEventListener('change', onOtaFileSelected);
@@ -469,8 +477,10 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
       const mode = String(s.net_mode || 'AP');
       const pref = String(s.net_pref || 'ap').toUpperCase();
       const batteryMode = String(s.battery_mode || 'auto').toUpperCase();
+      const zeroOnBoot = (s.zero_on_boot !== false);
       const statusBits = [`Mode ${mode}`, `Preference ${pref}`];
       statusBits.push(`Battery ${batteryMode}`);
+      statusBits.push(`Startup ZERO ${zeroOnBoot ? 'ON' : 'OFF'}`);
       if (s.sta_connected) statusBits.push('STA connected');
       if (s.ap_active) statusBits.push('AP active');
       netStatusEl.textContent = statusBits.join(' | ');
@@ -485,6 +495,7 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
         netModeEl.value = (String(s.net_pref || 'ap').toLowerCase() === 'sta') ? 'sta' : 'ap';
         const batteryMode = String(s.battery_mode || 'auto').toLowerCase();
         netBatteryModeEl.value = (batteryMode === 'present' || batteryMode === 'absent') ? batteryMode : 'auto';
+        netZeroOnBootEl.value = (s.zero_on_boot === false) ? 'off' : 'on';
         netHostnameEl.value = s.hostname || '';
         netSsidEl.value = s.sta_ssid || '';
       }
@@ -617,6 +628,7 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
       const batteryMode = netBatteryModeEl.value === 'present'
         ? 'present'
         : (netBatteryModeEl.value === 'absent' ? 'absent' : 'auto');
+      const zeroOnBoot = (netZeroOnBootEl.value === 'off') ? 'off' : 'on';
       const ssid = netSsidEl.value.trim();
       const hostname = netHostnameEl.value.trim();
       const password = netPasswordEl.value;
@@ -627,11 +639,12 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
       }
 
       netSaveBtn.disabled = true;
-      netMsgEl.textContent = 'Saving network settings...';
+      netMsgEl.textContent = 'Saving settings...';
       try {
         const body = new URLSearchParams();
         body.set('mode', mode);
         body.set('battery_mode', batteryMode);
+        body.set('zero_on_boot', zeroOnBoot);
         body.set('ssid', ssid);
         body.set('hostname', hostname);
         if (password.length > 0) body.set('password', password);
@@ -643,14 +656,14 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
         });
         const out = await r.json();
         if (out.ok) {
-          netMsgEl.textContent = 'Network settings applied.';
+          netMsgEl.textContent = 'Settings applied.';
           netPasswordEl.value = '';
           networkFormDirty = false;
         } else {
           netMsgEl.textContent = `Save failed: ${out.error || 'unknown error'}`;
         }
       } catch (e) {
-        netMsgEl.textContent = 'Network save failed.';
+        netMsgEl.textContent = 'Save failed.';
       } finally {
         netSaveBtn.disabled = false;
       }
@@ -1336,6 +1349,7 @@ void send_network_state_json(bool ok = true, const char *error = nullptr, int co
     "{\"ok\":%s,"
     "\"net_mode\":\"%s\",\"net_pref\":\"%s\","
     "\"battery_mode\":\"%s\","
+    "\"zero_on_boot\":%s,"
     "\"hostname\":\"%s\",\"hostname_local\":\"%s\","
     "\"sta_ssid\":\"%s\",\"sta_connected\":%s,\"sta_ip\":\"%s\","
     "\"ap_active\":%s,\"ap_ssid\":\"%s\",\"ap_ip\":\"%s\","
@@ -1344,6 +1358,7 @@ void send_network_state_json(bool ok = true, const char *error = nullptr, int co
     ok ? "true" : "false",
     mode_esc, pref_esc,
     battery_presence_mode_to_pref(getBatteryPresenceMode()),
+    getAutoZeroOnBootEnabled() ? "true" : "false",
     host_esc, host_local_esc,
     ssid_esc, sta_connected ? "true" : "false", sta_ip_esc,
     ap_active ? "true" : "false", ap_ssid_esc, ap_ip_esc,
@@ -1652,12 +1667,14 @@ void handle_network_get() {
 void handle_network_post() {
   const String mode_in = get_request_value("mode");
   const String battery_mode_in = get_request_value("battery_mode");
+  const String zero_on_boot_in = get_request_value("zero_on_boot");
   const String ssid_in = get_request_value("ssid");
   const String pass_in = get_request_value("password");
   const String host_in = get_request_value("hostname");
 
   bool update_mode = mode_in.length() > 0;
   bool update_battery_mode = battery_mode_in.length() > 0 || server.hasArg("battery_mode");
+  bool update_zero_on_boot = zero_on_boot_in.length() > 0 || server.hasArg("zero_on_boot");
   bool update_ssid = ssid_in.length() > 0 || server.hasArg("ssid");
   bool update_pass = pass_in.length() > 0 || server.hasArg("password");
   bool update_host = host_in.length() > 0 || server.hasArg("hostname");
@@ -1674,6 +1691,9 @@ void handle_network_post() {
   }
   if (update_battery_mode) {
     setBatteryPresenceMode(parse_battery_presence_mode(battery_mode_in));
+  }
+  if (update_zero_on_boot) {
+    setAutoZeroOnBootEnabled(parse_bool_flag(zero_on_boot_in));
   }
   if (update_ssid) {
     copy_cstr(net_cfg.sta_ssid, sizeof(net_cfg.sta_ssid), ssid_in.c_str());
