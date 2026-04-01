@@ -162,11 +162,28 @@ Available in Phase A:
 - Diagnostics panel:
   - expandable diagnostics card with raw/remapped/corrected IMU values
   - live offset/zero/alignment references and workflow flags
+- Surface displacement setup assistant:
+  - estimate trailing-edge displacement from `ROLL` or `PITCH`
+  - surface presets for `Aileron`, `Elevator`, and `Rudder`
+  - `AUTO` source can follow the active single-axis display, with preset fallback when the UI is in `BOTH`
+  - choose target by angle or displacement
+  - separate `UP` / `DOWN` targets for differential setup work
+  - configurable tolerance window
+  - optional configurable audio approach window, with automatic fallback
+  - optional browser-side audio cues while approaching target
 - Network panel:
   - switch between `AP only` and `STA with AP fallback`
   - toggle startup ZERO on/off
+  - select persistent readout decimals (`1`, `2`, `3`) shared by touch UI and web UI
+  - select persistent display brightness (`25%`, `50%`, `75%`, `100%`) for the device screen
   - set STA SSID/password
   - set custom hostname (`<your-hostname>.local`) for multi-unit deployments
+- Device settings panel:
+  - battery presence mode, startup ZERO, readout decimals, touch lock, and brightness are separated from network settings
+  - touch input can be disabled temporarily for masking-tape workflows
+  - optional checkbox allows the touch lock to persist across reboot
+- Web UI panel:
+  - browser-local day/dark theme switching
 - OTA panel:
   - upload firmware `.bin` from browser and apply update
 - Workflow sync is shared across touch, serial, ACTION button, and web.
@@ -345,6 +362,18 @@ Examples:
 - Remaining:
   - Add interrupted-update behavior verification (network loss, power-loss during update).
   - Add signed-manifest verification (beyond checksum) if threat model requires it.
+
+6. Web setup workflow enhancements (focus-group backlog)
+- Status: In progress
+- Remaining:
+  - Extend the web displacement view:
+    - evaluate whether preset defaults are good enough from real bench use
+    - decide whether `AUTO` source behavior should remain the default for rudder workflows
+  - Explore control-surface linearity capture:
+    - guide operator through servo sweep setup
+    - record measured angles through the sweep
+    - compare to assumed linear travel between endpoints
+    - note: higher-complexity feature with workflow and modeling risk
 
 ## Completed Milestones
 

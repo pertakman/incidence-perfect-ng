@@ -76,9 +76,22 @@ static const uint32_t panelColdSettleMs = 30;
 static const uint32_t panelWakeSplashPreDelayMs = 20;
 static const uint32_t panelDeepSleepBeginRetryDelayMs = 80;
 static const uint32_t panelDeepSleepBeginRetryCount = 5;
+static uint8_t last_applied_brightness_percent = 0xFF;
+
+static void apply_display_brightness()
+{
+  const uint8_t percent = getDisplayBrightnessPercent();
+  if (percent == last_applied_brightness_percent) return;
+  const uint8_t panel_value = (uint8_t)((percent * 255U + 50U) / 100U);
+  bus->beginWrite();
+  bus->writeC8D8(0x51, panel_value);
+  bus->endWrite();
+  last_applied_brightness_percent = percent;
+}
 
 static void show_startup_splash()
 {
+  apply_display_brightness();
   const uint8_t splash_rotation =
     displayRotated ? ((LCD_BASE_ROTATION + 2) % 4) : LCD_BASE_ROTATION;
   gfx->setRotation(splash_rotation);
@@ -219,6 +232,14 @@ static const char *orientation_text_for(OrientationMode m)
 static const char *orientation_instruction_text_for(OrientationMode m)
 {
   return (m == MODE_SCREEN_VERTICAL) ? "screen vertically" : "screen facing up";
+}
+
+static int readout_decimals()
+{
+  const int decimals = (int)getDisplayPrecisionMode();
+  if (decimals < 1) return 1;
+  if (decimals > 3) return 3;
+  return decimals;
 }
 
 static void update_status_label()
@@ -1226,8 +1247,8 @@ static void create_ui()
 
 static void update_ui()
 {
-  static char last_r[16] = "";
-  static char last_p[16] = "";
+  static char last_r[20] = "";
+  static char last_p[20] = "";
   static bool last_align_active = false;
   static bool last_frozen = false;
   static float frozen_display_roll = 0.0f;
@@ -1288,9 +1309,10 @@ static void update_ui()
   }
   update_boot_hint_label();
 
-  char buf[16];
+  char buf[20];
+  const int decimals = readout_decimals();
 
-  snprintf(buf, sizeof(buf), "% .2f%s", ui_roll_smooth, DEG_SYM);
+  snprintf(buf, sizeof(buf), "% .*f%s", decimals, ui_roll_smooth, DEG_SYM);
   if (strcmp(buf, last_r)) {
     lv_label_set_text(label_roll_value, buf);
     lv_obj_set_style_text_color(label_roll_value,
@@ -1298,7 +1320,7 @@ static void update_ui()
     strcpy(last_r, buf);
   }
 
-  snprintf(buf, sizeof(buf), "% .2f%s", ui_pitch_smooth, DEG_SYM);
+  snprintf(buf, sizeof(buf), "% .*f%s", decimals, ui_pitch_smooth, DEG_SYM);
   if (strcmp(buf, last_p)) {
     lv_label_set_text(label_pitch_value, buf);
     lv_obj_set_style_text_color(label_pitch_value,
@@ -1334,6 +1356,8 @@ void setup_display()
   }
   if (ok) {
     gfx->displayOn();
+    last_applied_brightness_percent = 0xFF;
+    apply_display_brightness();
     delay(woke_from_deep_sleep ? panelWakeSettleMs : panelColdSettleMs);
     // Clear once so first splash frame is not dropped on sleepy panel state.
     gfx->fillScreen(0x0000);
@@ -1404,6 +1428,7 @@ void loop_display()
 
   uint32_t now = millis();
   int desired_rotation = displayRotated ? 1 : 0;
+  apply_display_brightness();
 
   if (!panel_wake_ensured && gfx) {
     gfx->displayOn();

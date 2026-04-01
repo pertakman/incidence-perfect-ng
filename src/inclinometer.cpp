@@ -66,6 +66,10 @@
 #define EEPROM_ADDR_TOUCH_UI_LAYOUT  104
 #define EEPROM_ADDR_AXIS_MODE        105
 #define EEPROM_ADDR_AUTO_ZERO_BOOT   106
+#define EEPROM_ADDR_DISPLAY_PRECISION 107
+#define EEPROM_ADDR_DISPLAY_BRIGHTNESS 108
+#define EEPROM_ADDR_TOUCH_ENABLED    109
+#define EEPROM_ADDR_TOUCH_PERSIST    110
 static const uint32_t EEPROM_BIAS_MAGIC = 0x42534131UL; // "BSA1"
 static const uint32_t EEPROM_ZERO_MAGIC = 0x5A455231UL; // "ZER1"
 
@@ -90,6 +94,10 @@ OrientationMode orientationMode;
 bool displayRotated = false;
 volatile TouchUiLayoutMode touchUiLayoutMode = TOUCH_UI_ADVANCED;
 static bool autoZeroOnBootEnabled = true;
+static DisplayPrecisionMode displayPrecisionMode = DISPLAY_PRECISION_2DP;
+static uint8_t displayBrightnessPercent = 100;
+static bool touchInputEnabled = true;
+static bool touchLockPersistent = false;
 static bool freezeActive = false;
 static float freeze_roll = 0.0f;
 static float freeze_pitch = 0.0f;
@@ -202,6 +210,20 @@ static const float batteryVoltageScaleCal = 1.0550f;
 static const unsigned long deepSleepPreEntryDelayMs = 20;
 static const unsigned long deepSleepSerialFlushDelayMs = 60;
 static const unsigned long touchWakeInitDelayMs = 160;
+
+static DisplayPrecisionMode sanitize_display_precision(uint8_t raw) {
+  switch (raw) {
+    case 1: return DISPLAY_PRECISION_1DP;
+    case 3: return DISPLAY_PRECISION_3DP;
+    default: return DISPLAY_PRECISION_2DP;
+  }
+}
+
+static uint8_t sanitize_display_brightness(uint8_t raw) {
+  if (raw > 100) return 100;
+  if (raw < 10) return 10;
+  return raw;
+}
 
 enum AlignmentStep {
   ALIGN_SCREEN_UP = 0,
@@ -583,7 +605,15 @@ void setup_inclinometer() {
   const uint8_t layout_raw = EEPROM.read(EEPROM_ADDR_TOUCH_UI_LAYOUT);
   touchUiLayoutMode = (layout_raw == (uint8_t)TOUCH_UI_SIMPLE) ? TOUCH_UI_SIMPLE : TOUCH_UI_ADVANCED;
   const uint8_t auto_zero_raw = EEPROM.read(EEPROM_ADDR_AUTO_ZERO_BOOT);
+  const uint8_t precision_raw = EEPROM.read(EEPROM_ADDR_DISPLAY_PRECISION);
+  const uint8_t brightness_raw = EEPROM.read(EEPROM_ADDR_DISPLAY_BRIGHTNESS);
+  const uint8_t touch_enabled_raw = EEPROM.read(EEPROM_ADDR_TOUCH_ENABLED);
+  const uint8_t touch_persist_raw = EEPROM.read(EEPROM_ADDR_TOUCH_PERSIST);
   autoZeroOnBootEnabled = (auto_zero_raw != 0);
+  displayPrecisionMode = sanitize_display_precision(precision_raw);
+  displayBrightnessPercent = sanitize_display_brightness((brightness_raw == 0xFF || brightness_raw == 0) ? 100 : brightness_raw);
+  touchLockPersistent = (touch_persist_raw != 0 && touch_persist_raw != 0xFF);
+  touchInputEnabled = touchLockPersistent ? (touch_enabled_raw != 0) : true;
   EEPROM.get(EEPROM_ADDR_ALIGN,     align_roll);
   EEPROM.get(EEPROM_ADDR_ALIGN + 4, align_pitch);
 
@@ -1749,6 +1779,62 @@ void setAutoZeroOnBootEnabled(bool enabled) {
   EEPROM.write(EEPROM_ADDR_AUTO_ZERO_BOOT, enabled ? 1 : 0);
   EEPROM.commit();
   Serial.print("Startup ZERO: ");
+  Serial.println(enabled ? "ON" : "OFF");
+}
+
+DisplayPrecisionMode getDisplayPrecisionMode(void) {
+  return displayPrecisionMode;
+}
+
+void setDisplayPrecisionMode(DisplayPrecisionMode mode) {
+  displayPrecisionMode = sanitize_display_precision((uint8_t)mode);
+  EEPROM.write(EEPROM_ADDR_DISPLAY_PRECISION, (uint8_t)displayPrecisionMode);
+  EEPROM.commit();
+  Serial.print("Display precision: ");
+  Serial.println((int)displayPrecisionMode);
+}
+
+uint8_t getDisplayBrightnessPercent(void) {
+  return displayBrightnessPercent;
+}
+
+void setDisplayBrightnessPercent(uint8_t percent) {
+  displayBrightnessPercent = sanitize_display_brightness(percent);
+  EEPROM.write(EEPROM_ADDR_DISPLAY_BRIGHTNESS, displayBrightnessPercent);
+  EEPROM.commit();
+  Serial.print("Display brightness: ");
+  Serial.print((int)displayBrightnessPercent);
+  Serial.println("%");
+}
+
+bool getTouchInputEnabled(void) {
+  return touchInputEnabled;
+}
+
+void setTouchInputEnabled(bool enabled) {
+  touchInputEnabled = enabled;
+  if (touchLockPersistent) {
+    EEPROM.write(EEPROM_ADDR_TOUCH_ENABLED, enabled ? 1 : 0);
+    EEPROM.commit();
+  }
+  Serial.print("Touch input: ");
+  Serial.println(enabled ? "ON" : "OFF");
+}
+
+bool getTouchLockPersistent(void) {
+  return touchLockPersistent;
+}
+
+void setTouchLockPersistent(bool enabled) {
+  touchLockPersistent = enabled;
+  EEPROM.write(EEPROM_ADDR_TOUCH_PERSIST, enabled ? 1 : 0);
+  if (enabled) {
+    EEPROM.write(EEPROM_ADDR_TOUCH_ENABLED, touchInputEnabled ? 1 : 0);
+  } else {
+    EEPROM.write(EEPROM_ADDR_TOUCH_ENABLED, 1);
+  }
+  EEPROM.commit();
+  Serial.print("Touch lock persistence: ");
   Serial.println(enabled ? "ON" : "OFF");
 }
 

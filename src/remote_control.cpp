@@ -87,66 +87,137 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Incidence Perfect NG</title>
   <style>
-    body { font-family: Arial, sans-serif; margin: 16px; background: #0b1020; color: #eef4ff; }
+    :root {
+      --bg: #0b1020;
+      --text: #eef4ff;
+      --muted: #9fb3d9;
+      --card: #141c34;
+      --card-2: #101933;
+      --border: #223056;
+      --input-bg: #0d1733;
+      --input-border: #31406f;
+      --button-bg: #2a7fff;
+      --button-text: #ffffff;
+      --code: #8ec7ff;
+      --bar-bg: #2e354f;
+      --bar-fill: #6fd3ff;
+      --pill-bg: #1c2748;
+      --pill-text: #c9d8ff;
+      --pill-ok-bg: #193a2a;
+      --pill-ok-text: #8df1c7;
+      --pill-warn-bg: #4a2d2d;
+      --pill-warn-text: #ffd1d1;
+      --metric-ok: #8df1c7;
+      --metric-warn: #ffd782;
+    }
+    body[data-theme="day"] {
+      --bg: #eef3fb;
+      --text: #11203c;
+      --muted: #516684;
+      --card: #ffffff;
+      --card-2: #f4f7fc;
+      --border: #c6d3ea;
+      --input-bg: #ffffff;
+      --input-border: #9fb3d9;
+      --button-bg: #245fd1;
+      --button-text: #ffffff;
+      --code: #1f58b8;
+      --bar-bg: #dbe4f2;
+      --bar-fill: #2f7de1;
+      --pill-bg: #dde6f6;
+      --pill-text: #32496d;
+      --pill-ok-bg: #d8efe4;
+      --pill-ok-text: #1d6b49;
+      --pill-warn-bg: #f6dedc;
+      --pill-warn-text: #8b433c;
+      --metric-ok: #1f8c60;
+      --metric-warn: #b06d00;
+    }
+    body { font-family: Arial, sans-serif; margin: 16px; background: var(--bg); color: var(--text); }
     h1 { margin: 0 0 8px 0; font-size: 24px; }
-    .muted { color: #9fb3d9; margin-bottom: 12px; }
-    .card { background: #141c34; border-radius: 10px; padding: 14px; margin-bottom: 12px; }
+    .muted { color: var(--muted); margin-bottom: 12px; }
+    .card { background: var(--card); border-radius: 10px; padding: 14px; margin-bottom: 12px; }
     .card summary { cursor: pointer; font-size: 18px; font-weight: 700; }
     .row { display: flex; gap: 10px; flex-wrap: wrap; }
-    .metric-card { flex: 1; min-width: 130px; text-align: center; }
+    #metricsRow { justify-content: center; gap: 28px; }
+    .metric-card { flex: 0 1 280px; min-width: 200px; max-width: 320px; text-align: center; }
     #metricsRow.single-axis { justify-content: center; }
     #metricsRow.single-axis > .metric-card { flex: 0 1 300px; max-width: 300px; }
+    .slider-control { min-width: 220px; max-width: 420px; }
+    .slider-control > .row { gap: 10px; align-items: center; flex-wrap: nowrap; }
+    .slider-control input[type="range"] { flex: 1; min-width: 150px; }
+    .slider-control code { flex: 0 0 auto; min-width: 42px; text-align: right; }
     .value { font-size: 36px; font-weight: bold; margin-top: 4px; transition: color .12s linear; }
     .value.warn { color: #FFBF00; }
     .value.crit { color: #DC143C; }
     button {
       border: 0; border-radius: 8px; padding: 12px 14px; min-width: 90px;
-      background: #2a7fff; color: white; font-weight: 700; cursor: pointer;
+      background: var(--button-bg); color: var(--button-text); font-weight: 700; cursor: pointer;
     }
     button:disabled { opacity: .55; cursor: not-allowed; }
     button:active { transform: scale(0.98); }
     input, select {
       width: 100%; box-sizing: border-box;
-      border: 1px solid #31406f; border-radius: 8px;
-      background: #0d1733; color: #eef4ff; padding: 10px;
+      border: 1px solid var(--input-border); border-radius: 8px;
+      background: var(--input-bg); color: var(--text); padding: 10px;
     }
     input[type="checkbox"] { width: auto; padding: 0; }
+    input[type="range"] { accent-color: var(--button-bg); }
     label { display: block; }
     #msg { min-height: 18px; color: #8cf0c6; margin-top: 8px; }
     .hidden { display: none; }
-    .bar { height: 8px; background: #2e354f; border-radius: 99px; overflow: hidden; margin-top: 10px; }
-    .bar > div { height: 100%; width: 0%; background: #6fd3ff; transition: width .12s linear; }
-    code { color: #8ec7ff; }
+    .bar { height: 8px; background: var(--bar-bg); border-radius: 99px; overflow: hidden; margin-top: 10px; }
+    .bar > div { height: 100%; width: 0%; background: var(--bar-fill); transition: width .12s linear; }
+    code { color: var(--code); }
     .diag-layout { margin-top: 10px; display: grid; gap: 10px; }
     .diag-pills { display: flex; gap: 8px; flex-wrap: wrap; }
     .pill {
       display: inline-flex; align-items: center; border-radius: 999px; padding: 4px 10px;
       font-size: 11px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase;
-      background: #1c2748; color: #c9d8ff;
+      background: var(--pill-bg); color: var(--pill-text);
     }
-    .pill.ok { background: #193a2a; color: #8df1c7; }
-    .pill.warn { background: #4a2d2d; color: #ffd1d1; }
+    .pill.ok { background: var(--pill-ok-bg); color: var(--pill-ok-text); }
+    .pill.warn { background: var(--pill-warn-bg); color: var(--pill-warn-text); }
     .diag-grid { display: grid; gap: 8px; grid-template-columns: 1fr; }
     @media (min-width: 640px) { .diag-grid { grid-template-columns: 1fr 1fr; } }
-    .diag-block { background: #101933; border: 1px solid #223056; border-radius: 8px; padding: 8px 10px; }
+    .diag-block { background: var(--card-2); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; }
     .diag-block h3 {
       margin: 0 0 6px 0; font-size: 12px; letter-spacing: .04em;
-      text-transform: uppercase; color: #9fb3d9;
+      text-transform: uppercase; color: var(--muted);
     }
     .diag-row {
       display: grid; grid-template-columns: 68px minmax(0, 1fr);
       gap: 10px; margin: 3px 0; align-items: baseline;
     }
-    .diag-row span { color: #9fb3d9; font-size: 12px; }
+    .diag-row span { color: var(--muted); font-size: 12px; }
     .diag-row code {
-      color: #d9e6ff; font-size: 12px; text-align: right;
+      color: var(--text); font-size: 12px; text-align: right;
       white-space: normal; word-break: break-word; overflow-wrap: anywhere;
     }
     @media (max-width: 460px) {
       .diag-row { grid-template-columns: 1fr; gap: 2px; }
       .diag-row code { text-align: left; }
     }
-    .diag-note { color: #8ca2d3; font-size: 11px; margin: 0; }
+    .diag-note { color: var(--muted); font-size: 11px; margin: 0; }
+    .calc-grid { display: grid; gap: 10px; grid-template-columns: 1fr; }
+    @media (min-width: 700px) { .calc-grid { grid-template-columns: 1fr 1fr; } }
+    @media (min-width: 1020px) { .calc-grid.calc-grid-3 { grid-template-columns: 1fr 1fr 1fr; } }
+    .calc-block { background: var(--card-2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
+    .calc-block h3 { margin: 0 0 8px 0; font-size: 13px; color: var(--text); }
+    .calc-metric { font-size: 28px; font-weight: 700; margin-top: 6px; }
+    .calc-caption { color: var(--muted); font-size: 12px; margin-top: 4px; }
+    .calc-metric.ok { color: var(--metric-ok); }
+    .calc-metric.warn { color: var(--metric-warn); }
+    .preset-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-end; }
+    .linearity-canvas {
+      width: 100%;
+      height: 280px;
+      display: block;
+      border-radius: 8px;
+      background: var(--card-2);
+      border: 1px solid var(--border);
+      margin-top: 10px;
+    }
   </style>
 </head>
 <body>
@@ -199,6 +270,191 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
   </div>
 
   <details class="card">
+    <summary>Surface Displacement</summary>
+    <p class="diag-note">Estimate trailing-edge displacement from live angle using `displacement = depth * sin(angle)` and optionally guide setup toward separate up/down targets.</p>
+    <div class="preset-row" style="margin-top:8px;">
+      <label style="min-width:180px;">
+        <div class="muted" style="margin:0 0 4px 0;">Preset</div>
+        <select id="dispPreset">
+          <option value="custom">Custom</option>
+          <option value="aileron">Aileron</option>
+          <option value="elevator">Elevator</option>
+          <option value="rudder">Rudder</option>
+        </select>
+      </label>
+      <button id="dispPresetApplyBtn" type="button">Apply Preset</button>
+      <div id="dispPresetHint" class="muted" style="min-width:240px;">Choose a surface preset to prefill common values.</div>
+    </div>
+    <div class="row" style="margin-top:8px;">
+      <label style="min-width:180px; max-width:260px;">
+        <div class="muted" style="margin:0 0 4px 0;">Surface label</div>
+        <input id="dispLabel" type="text" placeholder="Aileron" maxlength="24">
+      </label>
+      <label style="min-width:170px;">
+        <div class="muted" style="margin:0 0 4px 0;">Angle source</div>
+        <select id="dispAxis">
+          <option value="auto">AUTO</option>
+          <option value="roll">ROLL</option>
+          <option value="pitch">PITCH</option>
+        </select>
+      </label>
+      <label style="min-width:170px;">
+        <div class="muted" style="margin:0 0 4px 0;">Depth</div>
+        <input id="dispDepth" type="number" min="0" step="0.1" placeholder="30.0">
+      </label>
+      <label style="min-width:120px;">
+        <div class="muted" style="margin:0 0 4px 0;">Units</div>
+        <input id="dispUnit" type="text" value="mm" maxlength="8">
+      </label>
+    </div>
+    <div class="row" style="margin-top:8px;">
+      <label style="min-width:170px;">
+        <div class="muted" style="margin:0 0 4px 0;">Target mode</div>
+        <select id="dispTargetMode">
+          <option value="displacement">Displacement</option>
+          <option value="angle">Angle</option>
+        </select>
+      </label>
+      <label style="min-width:170px;">
+        <div class="muted" style="margin:0 0 4px 0;">Up target</div>
+        <input id="dispTargetUp" type="number" step="0.1" placeholder="12.0">
+      </label>
+      <label style="min-width:170px;">
+        <div class="muted" style="margin:0 0 4px 0;">Down target</div>
+        <input id="dispTargetDown" type="number" step="0.1" placeholder="-8.0">
+      </label>
+      <label style="min-width:170px;">
+        <div class="muted" style="margin:0 0 4px 0;">Tolerance</div>
+        <input id="dispTolerance" type="number" min="0.01" step="0.01" value="0.5">
+      </label>
+      <label style="min-width:170px;">
+        <div class="muted" style="margin:0 0 4px 0;">Approach window</div>
+        <input id="dispApproachWindow" type="number" min="0.01" step="0.01" placeholder="Auto">
+      </label>
+    </div>
+    <div class="row" style="margin-top:8px; align-items:flex-end;">
+      <label style="display:flex; align-items:center; gap:8px; min-width:170px;">
+        <input id="dispAudioEnabled" type="checkbox">
+        <span>Audio cues</span>
+      </label>
+      <button id="dispAudioArmBtn" type="button">Enable Audio</button>
+      <div id="dispAudioStatus" class="muted" style="min-width:220px;">Audio optional. Enable if you want audible guidance.</div>
+    </div>
+    <div class="calc-grid calc-grid-3" style="margin-top:10px;">
+      <div class="calc-block">
+        <h3 id="dispHeading">Live Surface</h3>
+        <div id="dispValue" class="calc-metric">--</div>
+        <div id="dispCaption" class="calc-caption">Enter depth to calculate displacement.</div>
+      </div>
+      <div class="calc-block">
+        <h3>Reference</h3>
+        <div id="dispAngle" class="calc-metric">--</div>
+        <div id="dispFormula" class="calc-caption">Using live angle from the selected axis.</div>
+      </div>
+      <div class="calc-block">
+        <h3 id="dispTargetHeading">Setup Target</h3>
+        <div id="dispTargetValue" class="calc-metric">--</div>
+        <div id="dispTargetCaption" class="calc-caption">Configure targets to guide setup.</div>
+      </div>
+    </div>
+  </details>
+
+  <details class="card">
+    <summary>Linearity</summary>
+    <p class="diag-note">Start a continuous endpoint-to-endpoint sweep on the radio first, then record here. The web UI treats time within each sweep as servo travel.</p>
+    <div class="row" style="margin-top:8px;">
+      <label style="min-width:170px;">
+        <div class="muted" style="margin:0 0 4px 0;">Source</div>
+        <select id="linearitySource">
+          <option value="displacement">Displacement</option>
+          <option value="pitch">PITCH</option>
+          <option value="roll">ROLL</option>
+        </select>
+      </label>
+      <label style="min-width:170px;">
+        <div class="muted" style="margin:0 0 4px 0;">Record seconds</div>
+        <input id="linearityDuration" type="number" min="4" max="20" step="1" value="8">
+      </label>
+      <div class="row" style="align-items:flex-end;">
+        <button id="linearityRecordBtn" type="button">Record</button>
+        <button id="linearityStopBtn" type="button" disabled>Stop</button>
+        <button id="linearityClearBtn" type="button">Clear</button>
+      </div>
+    </div>
+    <div id="linearityStatus" class="muted" style="margin-top:8px;">Ready. Start the servo sweep, then press Record.</div>
+    <canvas id="linearityCanvas" class="linearity-canvas" width="900" height="280"></canvas>
+    <div class="calc-grid calc-grid-3" style="margin-top:10px;">
+      <div class="calc-block">
+        <h3>Capture</h3>
+        <div id="linearityCaptureMetric" class="calc-metric">--</div>
+        <div id="linearityCaptureCaption" class="calc-caption">No sweep recorded yet.</div>
+      </div>
+      <div class="calc-block">
+        <h3>Deviation</h3>
+        <div id="linearityDeviationMetric" class="calc-metric">--</div>
+        <div id="linearityDeviationCaption" class="calc-caption">Deviation from ideal straight-line motion will appear here.</div>
+      </div>
+      <div class="calc-block">
+        <h3>Hysteresis</h3>
+        <div id="linearityHysteresisMetric" class="calc-metric">--</div>
+        <div id="linearityHysteresisCaption" class="calc-caption">Difference between averaged up/down sweeps will appear here.</div>
+      </div>
+    </div>
+  </details>
+
+  <details class="card">
+    <summary>Device Settings</summary>
+    <div id="deviceStatus" class="muted">Loading device settings...</div>
+    <div class="row" style="margin-top:8px;">
+      <label style="min-width:170px;">
+        <div class="muted" style="margin:0 0 4px 0;">Battery</div>
+        <select id="deviceBatteryMode">
+          <option value="auto">Auto detect</option>
+          <option value="present">Installed</option>
+          <option value="absent">No battery installed</option>
+        </select>
+      </label>
+      <label style="min-width:170px;">
+        <div class="muted" style="margin:0 0 4px 0;">Startup ZERO</div>
+        <select id="deviceZeroOnBoot">
+          <option value="on">Enabled</option>
+          <option value="off">Disabled</option>
+        </select>
+      </label>
+      <label style="min-width:170px;">
+        <div class="muted" style="margin:0 0 4px 0;">Readout decimals</div>
+        <select id="deviceDisplayPrecision">
+          <option value="1">1</option>
+          <option value="2">2</option>
+          <option value="3">3</option>
+        </select>
+      </label>
+      <label style="min-width:170px;">
+        <div class="muted" style="margin:0 0 4px 0;">Touch input</div>
+        <select id="deviceTouchEnabled">
+          <option value="on">Enabled</option>
+          <option value="off">Disabled</option>
+        </select>
+      </label>
+      <label class="slider-control">
+        <div class="muted" style="margin:0 0 4px 0;">Brightness</div>
+        <div class="row">
+          <input id="deviceDisplayBrightness" type="range" min="10" max="100" step="5">
+          <code id="deviceBrightnessValue">100%</code>
+        </div>
+      </label>
+    </div>
+    <label class="muted" style="display:flex; align-items:center; gap:8px; margin-top:8px;">
+      <input id="deviceTouchPersist" type="checkbox">
+      Persist touch lock across reboot
+    </label>
+    <div class="row" style="margin-top:10px;">
+      <button id="deviceSaveBtn" onclick="saveDeviceSettings()">Save Device Settings</button>
+    </div>
+    <div id="deviceMsg" class="muted" style="margin-top:8px;"></div>
+  </details>
+
+  <details class="card">
     <summary>Network</summary>
     <div id="netStatus" class="muted">Loading network state...</div>
     <div id="netAddr" class="muted"></div>
@@ -208,21 +464,6 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
         <select id="netMode">
           <option value="ap">AP only</option>
           <option value="sta">STA with AP fallback</option>
-        </select>
-      </label>
-      <label style="min-width:170px;">
-        <div class="muted" style="margin:0 0 4px 0;">Battery</div>
-        <select id="netBatteryMode">
-          <option value="auto">Auto detect</option>
-          <option value="present">Installed</option>
-          <option value="absent">No battery installed</option>
-        </select>
-      </label>
-      <label style="min-width:170px;">
-        <div class="muted" style="margin:0 0 4px 0;">Startup ZERO</div>
-        <select id="netZeroOnBoot">
-          <option value="on">Enabled</option>
-          <option value="off">Disabled</option>
         </select>
       </label>
       <label style="flex:1; min-width:180px;">
@@ -245,6 +486,20 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
       <button id="netRecoverBtn" onclick="recoverNetwork()">Recover AP Mode</button>
     </div>
     <div id="netMsg" class="muted" style="margin-top:8px;"></div>
+  </details>
+
+  <details class="card">
+    <summary>Web UI Appearance</summary>
+    <div class="row" style="margin-top:8px;">
+      <label style="min-width:180px;">
+        <div class="muted" style="margin:0 0 4px 0;">Theme</div>
+        <select id="webTheme">
+          <option value="dark">Dark</option>
+          <option value="day">Day</option>
+        </select>
+      </label>
+    </div>
+    <div id="webThemeMsg" class="muted" style="margin-top:8px;">Theme preference is saved in this browser.</div>
   </details>
 
   <details class="card">
@@ -318,6 +573,8 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
     const statusEl = document.getElementById('status');
     const msgEl = document.getElementById('msg');
     const fwEl = document.getElementById('fw');
+    const webThemeEl = document.getElementById('webTheme');
+    const webThemeMsgEl = document.getElementById('webThemeMsg');
     const rollEl = document.getElementById('roll');
     const pitchEl = document.getElementById('pitch');
     const rollCard = document.getElementById('rollCard');
@@ -331,11 +588,55 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
     const offsetCalControls = document.getElementById('offsetCalControls');
     const progressWrap = document.getElementById('progressWrap');
     const progressBar = document.getElementById('progressBar');
+    const dispLabelEl = document.getElementById('dispLabel');
+    const dispPresetEl = document.getElementById('dispPreset');
+    const dispPresetApplyBtn = document.getElementById('dispPresetApplyBtn');
+    const dispPresetHintEl = document.getElementById('dispPresetHint');
+    const dispAxisEl = document.getElementById('dispAxis');
+    const dispDepthEl = document.getElementById('dispDepth');
+    const dispUnitEl = document.getElementById('dispUnit');
+    const dispTargetModeEl = document.getElementById('dispTargetMode');
+    const dispTargetUpEl = document.getElementById('dispTargetUp');
+    const dispTargetDownEl = document.getElementById('dispTargetDown');
+    const dispToleranceEl = document.getElementById('dispTolerance');
+    const dispApproachWindowEl = document.getElementById('dispApproachWindow');
+    const dispAudioEnabledEl = document.getElementById('dispAudioEnabled');
+    const dispAudioArmBtn = document.getElementById('dispAudioArmBtn');
+    const dispAudioStatusEl = document.getElementById('dispAudioStatus');
+    const dispHeadingEl = document.getElementById('dispHeading');
+    const dispValueEl = document.getElementById('dispValue');
+    const dispCaptionEl = document.getElementById('dispCaption');
+    const dispAngleEl = document.getElementById('dispAngle');
+    const dispFormulaEl = document.getElementById('dispFormula');
+    const dispTargetHeadingEl = document.getElementById('dispTargetHeading');
+    const dispTargetValueEl = document.getElementById('dispTargetValue');
+    const dispTargetCaptionEl = document.getElementById('dispTargetCaption');
+    const linearitySourceEl = document.getElementById('linearitySource');
+    const linearityDurationEl = document.getElementById('linearityDuration');
+    const linearityRecordBtn = document.getElementById('linearityRecordBtn');
+    const linearityStopBtn = document.getElementById('linearityStopBtn');
+    const linearityClearBtn = document.getElementById('linearityClearBtn');
+    const linearityStatusEl = document.getElementById('linearityStatus');
+    const linearityCanvasEl = document.getElementById('linearityCanvas');
+    const linearityCaptureMetricEl = document.getElementById('linearityCaptureMetric');
+    const linearityCaptureCaptionEl = document.getElementById('linearityCaptureCaption');
+    const linearityDeviationMetricEl = document.getElementById('linearityDeviationMetric');
+    const linearityDeviationCaptionEl = document.getElementById('linearityDeviationCaption');
+    const linearityHysteresisMetricEl = document.getElementById('linearityHysteresisMetric');
+    const linearityHysteresisCaptionEl = document.getElementById('linearityHysteresisCaption');
+    const deviceStatusEl = document.getElementById('deviceStatus');
+    const deviceBatteryModeEl = document.getElementById('deviceBatteryMode');
+    const deviceZeroOnBootEl = document.getElementById('deviceZeroOnBoot');
+    const deviceDisplayPrecisionEl = document.getElementById('deviceDisplayPrecision');
+    const deviceTouchEnabledEl = document.getElementById('deviceTouchEnabled');
+    const deviceTouchPersistEl = document.getElementById('deviceTouchPersist');
+    const deviceDisplayBrightnessEl = document.getElementById('deviceDisplayBrightness');
+    const deviceBrightnessValueEl = document.getElementById('deviceBrightnessValue');
+    const deviceSaveBtn = document.getElementById('deviceSaveBtn');
+    const deviceMsgEl = document.getElementById('deviceMsg');
     const netStatusEl = document.getElementById('netStatus');
     const netAddrEl = document.getElementById('netAddr');
     const netModeEl = document.getElementById('netMode');
-    const netBatteryModeEl = document.getElementById('netBatteryMode');
-    const netZeroOnBootEl = document.getElementById('netZeroOnBoot');
     const netHostnameEl = document.getElementById('netHostname');
     const netSsidEl = document.getElementById('netSsid');
     const netPasswordEl = document.getElementById('netPassword');
@@ -365,18 +666,90 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
     const diagAlignEl = document.getElementById('diagAlign');
     const WARN_LIMIT = 30.0;
     const CRIT_LIMIT = 45.0;
+    const DISPLACEMENT_PREFS_KEY = 'ipng_displacement_v2';
+    const WEB_THEME_PREFS_KEY = 'ipng_web_theme_v1';
+    const LINEARITY_PREFS_KEY = 'ipng_linearity_v1';
     let networkFormDirty = false;
+    let deviceFormDirty = false;
     let otaUploadInFlight = false;
+    let currentDisplayDecimals = 2;
+    let lastLiveState = null;
+    let liveRefreshInFlight = false;
+    let stateRefreshInFlight = false;
+    let networkRefreshInFlight = false;
+    let guideAudioCtx = null;
+    let guideAudioOsc = null;
+    let guideAudioGain = null;
+    let guideAudioUnlocked = false;
+    let guideAudioPulseUntilMs = 0;
+    let guideAudioLastPulseMs = 0;
+    let linearityCapture = {
+      recording: false,
+      startedAtMs: 0,
+      durationMs: 8000,
+      samples: [],
+      result: null
+    };
 
-    [netModeEl, netBatteryModeEl, netZeroOnBootEl, netHostnameEl, netSsidEl, netPasswordEl].forEach((el) => {
+    [deviceBatteryModeEl, deviceZeroOnBootEl, deviceDisplayPrecisionEl, deviceTouchEnabledEl, deviceTouchPersistEl, deviceDisplayBrightnessEl].forEach((el) => {
+      el.addEventListener('input', () => { deviceFormDirty = true; syncBrightnessLabel(); });
+    });
+    [netModeEl, netHostnameEl, netSsidEl, netPasswordEl].forEach((el) => {
       el.addEventListener('input', () => { networkFormDirty = true; });
     });
     otaFileEl.addEventListener('change', onOtaFileSelected);
+    webThemeEl.addEventListener('input', () => {
+      applyWebTheme(webThemeEl.value);
+      saveWebTheme();
+    });
+    [dispLabelEl, dispPresetEl, dispAxisEl, dispDepthEl, dispUnitEl, dispTargetModeEl, dispTargetUpEl, dispTargetDownEl, dispToleranceEl, dispApproachWindowEl, dispAudioEnabledEl].forEach((el) => {
+      el.addEventListener('input', () => {
+        saveDisplacementPrefs();
+        renderDisplacement(lastLiveState);
+      });
+    });
+    dispAudioArmBtn.addEventListener('click', armGuideAudio);
+    dispPresetApplyBtn.addEventListener('click', applyDisplacementPreset);
+    [linearitySourceEl, linearityDurationEl].forEach((el) => {
+      el.addEventListener('input', () => {
+        saveLinearityPrefs();
+        drawLinearityChart(linearityCapture.result);
+      });
+    });
+    linearityRecordBtn.addEventListener('click', startLinearityCapture);
+    linearityStopBtn.addEventListener('click', () => stopLinearityCapture(false));
+    linearityClearBtn.addEventListener('click', clearLinearityCapture);
+    window.addEventListener('resize', () => drawLinearityChart(linearityCapture.result));
 
     function fmt(v) {
       const n = Number(v);
       if (Number.isNaN(n)) return '--';
-      return (n >= 0 ? '+' : '') + n.toFixed(2) + '\u00B0';
+      return (n >= 0 ? '+' : '') + n.toFixed(currentDisplayDecimals) + '\u00B0';
+    }
+
+    function applyWebTheme(theme) {
+      const next = theme === 'day' ? 'day' : 'dark';
+      document.body.setAttribute('data-theme', next);
+      webThemeEl.value = next;
+      webThemeMsgEl.textContent = `${next === 'day' ? 'Day' : 'Dark'} theme active in this browser.`;
+      drawLinearityChart(linearityCapture.result);
+    }
+
+    function saveWebTheme() {
+      try {
+        localStorage.setItem(WEB_THEME_PREFS_KEY, webThemeEl.value === 'day' ? 'day' : 'dark');
+      } catch (e) {
+      }
+    }
+
+    function loadWebTheme() {
+      let theme = 'dark';
+      try {
+        const raw = localStorage.getItem(WEB_THEME_PREFS_KEY);
+        if (raw === 'day' || raw === 'dark') theme = raw;
+      } catch (e) {
+      }
+      applyWebTheme(theme);
     }
 
     function setAngleClass(el, v) {
@@ -415,6 +788,841 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
     function f(v, d = 3) {
       const n = Number(v);
       return Number.isFinite(n) ? n.toFixed(d) : '--';
+    }
+
+    function sanitizeUnitText(raw) {
+      const cleaned = String(raw || '').trim();
+      return cleaned ? cleaned : 'mm';
+    }
+
+    function sanitizeTolerance(raw) {
+      const value = Number(raw);
+      return Number.isFinite(value) && value > 0 ? value : 0.5;
+    }
+
+    function sanitizeDisplayPrecision(raw) {
+      const value = Number(raw);
+      if (value === 1 || value === 3) return value;
+      return 2;
+    }
+
+    function sanitizeDisplayBrightness(raw) {
+      const value = Number(raw);
+      if (!Number.isFinite(value)) return 100;
+      const rounded = Math.round(value / 5) * 5;
+      return Math.max(10, Math.min(100, rounded));
+    }
+
+    function syncBrightnessLabel() {
+      deviceBrightnessValueEl.textContent = `${sanitizeDisplayBrightness(deviceDisplayBrightnessEl.value)}%`;
+    }
+
+    function sanitizePositiveOptional(raw) {
+      const value = Number(raw);
+      return Number.isFinite(value) && value > 0 ? value : NaN;
+    }
+
+    function sanitizeLinearityDuration(raw) {
+      const value = Math.round(Number(raw));
+      if (!Number.isFinite(value)) return 8;
+      return Math.max(4, Math.min(20, value));
+    }
+
+    function displacementLabelText() {
+      const label = String(dispLabelEl.value || '').trim();
+      return label ? label : 'Surface';
+    }
+
+    function signedNumberText(value, digits = currentDisplayDecimals, suffix = '') {
+      const n = Number(value);
+      if (!Number.isFinite(n)) return '--';
+      return `${n >= 0 ? '+' : ''}${n.toFixed(digits)}${suffix}`;
+    }
+
+    function setupMetricMeta(mode, unit) {
+      return mode === 'angle'
+        ? { label: 'angle', suffix: '\u00B0', window: 2.0 }
+        : { label: 'displacement', suffix: ` ${unit}`, window: 3.0 };
+    }
+
+    function presetDefinition(name) {
+      switch (name) {
+        case 'aileron':
+          return {
+            label: 'Aileron',
+            axis: 'pitch',
+            targetMode: 'displacement',
+            unit: 'mm',
+            hint: 'Aileron preset suggests PITCH and displacement targets for differential setup.'
+          };
+        case 'elevator':
+          return {
+            label: 'Elevator',
+            axis: 'pitch',
+            targetMode: 'displacement',
+            unit: 'mm',
+            hint: 'Elevator preset suggests PITCH and displacement targets.'
+          };
+        case 'rudder':
+          return {
+            label: 'Rudder',
+            axis: 'auto',
+            targetMode: 'displacement',
+            unit: 'mm',
+            hint: 'Rudder preset keeps AUTO source so you can verify which measured axis matches your fixture.'
+          };
+        default:
+          return {
+            label: '',
+            axis: 'auto',
+            targetMode: 'displacement',
+            unit: 'mm',
+            hint: 'Custom leaves you in full manual control.'
+          };
+      }
+    }
+
+    function resolveAutoAxis(s) {
+      const preset = presetDefinition(dispPresetEl.value);
+      const stateAxis = String((s && s.axis) || '').toUpperCase();
+      if (stateAxis === 'ROLL') return 'roll';
+      if (stateAxis === 'PITCH') return 'pitch';
+      if (preset.axis === 'roll' || preset.axis === 'pitch') return preset.axis;
+      return 'roll';
+    }
+
+    function axisChoiceText(rawAxis, resolvedAxis, s) {
+      if (rawAxis === 'auto') {
+        const stateAxis = String((s && s.axis) || '').toUpperCase();
+        if (stateAxis === 'ROLL' || stateAxis === 'PITCH') {
+          return `AUTO -> ${stateAxis}`;
+        }
+        return `AUTO -> ${resolvedAxis === 'pitch' ? 'PITCH' : 'ROLL'}`;
+      }
+      return resolvedAxis === 'pitch' ? 'PITCH' : 'ROLL';
+    }
+
+    function applyDisplacementPreset() {
+      const preset = presetDefinition(dispPresetEl.value);
+      dispLabelEl.value = preset.label;
+      dispAxisEl.value = preset.axis;
+      dispTargetModeEl.value = preset.targetMode;
+      dispUnitEl.value = preset.unit;
+      if (!String(dispToleranceEl.value || '').trim()) {
+        dispToleranceEl.value = '0.5';
+      }
+      dispPresetHintEl.textContent = preset.hint;
+      saveDisplacementPrefs();
+      renderDisplacement(lastLiveState);
+    }
+
+    function loadDisplacementPrefs() {
+      try {
+        const raw = localStorage.getItem(DISPLACEMENT_PREFS_KEY);
+        if (!raw) return;
+        const prefs = JSON.parse(raw);
+        if (prefs && typeof prefs === 'object') {
+          if (typeof prefs.label === 'string') dispLabelEl.value = prefs.label;
+          if (prefs.preset === 'aileron' || prefs.preset === 'elevator' || prefs.preset === 'rudder') dispPresetEl.value = prefs.preset;
+          if (prefs.axis === 'pitch') dispAxisEl.value = 'pitch';
+          if (prefs.axis === 'roll') dispAxisEl.value = 'roll';
+          if (prefs.axis === 'auto') dispAxisEl.value = 'auto';
+          if (prefs.depth !== undefined && prefs.depth !== null && prefs.depth !== '') dispDepthEl.value = String(prefs.depth);
+          if (typeof prefs.unit === 'string') dispUnitEl.value = prefs.unit;
+          if (prefs.targetMode === 'angle') dispTargetModeEl.value = 'angle';
+          if (prefs.targetMode === 'displacement') dispTargetModeEl.value = 'displacement';
+          if (prefs.targetUp !== undefined && prefs.targetUp !== null && prefs.targetUp !== '') dispTargetUpEl.value = String(prefs.targetUp);
+          if (prefs.targetDown !== undefined && prefs.targetDown !== null && prefs.targetDown !== '') dispTargetDownEl.value = String(prefs.targetDown);
+          if (prefs.tolerance !== undefined && prefs.tolerance !== null && prefs.tolerance !== '') dispToleranceEl.value = String(prefs.tolerance);
+          if (prefs.approachWindow !== undefined && prefs.approachWindow !== null && prefs.approachWindow !== '') dispApproachWindowEl.value = String(prefs.approachWindow);
+          dispAudioEnabledEl.checked = !!prefs.audioEnabled;
+        }
+      } catch (e) {
+      }
+    }
+
+    function saveDisplacementPrefs() {
+      try {
+        const prefs = {
+          label: String(dispLabelEl.value || '').trim(),
+          preset: dispPresetEl.value === 'custom' ? 'custom' : dispPresetEl.value,
+          axis: dispAxisEl.value === 'pitch' ? 'pitch' : 'roll',
+          depth: String(dispDepthEl.value || '').trim(),
+          unit: sanitizeUnitText(dispUnitEl.value),
+          targetMode: dispTargetModeEl.value === 'angle' ? 'angle' : 'displacement',
+          targetUp: String(dispTargetUpEl.value || '').trim(),
+          targetDown: String(dispTargetDownEl.value || '').trim(),
+          tolerance: String(dispToleranceEl.value || '').trim(),
+          approachWindow: String(dispApproachWindowEl.value || '').trim(),
+          audioEnabled: !!dispAudioEnabledEl.checked
+        };
+        if (dispAxisEl.value === 'auto') prefs.axis = 'auto';
+        localStorage.setItem(DISPLACEMENT_PREFS_KEY, JSON.stringify(prefs));
+      } catch (e) {
+      }
+    }
+
+    function linearySourceMetaName(source) {
+      if (source === 'roll') return 'ROLL';
+      if (source === 'pitch') return 'PITCH';
+      return 'Displacement';
+    }
+
+    function loadLinearityPrefs() {
+      try {
+        const raw = localStorage.getItem(LINEARITY_PREFS_KEY);
+        if (!raw) return;
+        const prefs = JSON.parse(raw);
+        if (prefs && typeof prefs === 'object') {
+          if (prefs.source === 'roll' || prefs.source === 'pitch' || prefs.source === 'displacement') {
+            linearitySourceEl.value = prefs.source;
+          }
+          if (prefs.duration !== undefined && prefs.duration !== null && prefs.duration !== '') {
+            linearityDurationEl.value = String(sanitizeLinearityDuration(prefs.duration));
+          }
+        }
+      } catch (e) {
+      }
+    }
+
+    function saveLinearityPrefs() {
+      try {
+        localStorage.setItem(LINEARITY_PREFS_KEY, JSON.stringify({
+          source: linearitySourceEl.value === 'roll' ? 'roll' : (linearitySourceEl.value === 'pitch' ? 'pitch' : 'displacement'),
+          duration: sanitizeLinearityDuration(linearityDurationEl.value)
+        }));
+      } catch (e) {
+      }
+    }
+
+    function setLinearityStatus(text) {
+      linearityStatusEl.textContent = text;
+    }
+
+    function resetLinearityMetrics() {
+      linearityCaptureMetricEl.textContent = '--';
+      linearityCaptureCaptionEl.textContent = 'No sweep recorded yet.';
+      linearityDeviationMetricEl.textContent = '--';
+      linearityDeviationCaptionEl.textContent = 'Deviation from ideal straight-line motion will appear here.';
+      linearityHysteresisMetricEl.textContent = '--';
+      linearityHysteresisCaptionEl.textContent = 'Difference between averaged up/down sweeps will appear here.';
+      linearityCaptureMetricEl.classList.remove('ok', 'warn');
+      linearityDeviationMetricEl.classList.remove('ok', 'warn');
+      linearityHysteresisMetricEl.classList.remove('ok', 'warn');
+    }
+
+    function getLinearityMeasurement(s) {
+      if (!s) return { ok: false, reason: 'Waiting for live data.' };
+      const source = linearitySourceEl.value === 'roll'
+        ? 'roll'
+        : (linearitySourceEl.value === 'pitch' ? 'pitch' : 'displacement');
+      if (source === 'roll' || source === 'pitch') {
+        const value = Number(source === 'pitch' ? s.pitch : s.roll);
+        if (!Number.isFinite(value)) return { ok: false, reason: `${linearySourceMetaName(source)} is unavailable.` };
+        return {
+          ok: true,
+          source,
+          value,
+          unit: '\u00B0',
+          label: linearySourceMetaName(source)
+        };
+      }
+      const axis = dispAxisEl.value === 'auto' ? resolveAutoAxis(s) : dispAxisEl.value;
+      const angle = Number(axis === 'pitch' ? s.pitch : s.roll);
+      const depth = Number(dispDepthEl.value);
+      const unit = sanitizeUnitText(dispUnitEl.value);
+      if (!Number.isFinite(depth) || depth <= 0) {
+        return { ok: false, reason: 'Enter surface depth in Surface Displacement before recording displacement linearity.' };
+      }
+      if (!Number.isFinite(angle)) {
+        return { ok: false, reason: 'Selected displacement source angle is unavailable.' };
+      }
+      return {
+        ok: true,
+        source,
+        value: depth * Math.sin(angle * Math.PI / 180.0),
+        unit: ` ${unit}`,
+        label: `${displacementLabelText()} displacement`
+      };
+    }
+
+    function drawLinearityChart(result) {
+      const canvas = linearityCanvasEl;
+      const ctx = canvas.getContext('2d');
+      const ratio = Math.max(1, window.devicePixelRatio || 1);
+      const width = Math.max(320, canvas.clientWidth || canvas.width || 900);
+      const height = Math.max(220, canvas.clientHeight || canvas.height || 280);
+      if (canvas.width !== Math.round(width * ratio) || canvas.height !== Math.round(height * ratio)) {
+        canvas.width = Math.round(width * ratio);
+        canvas.height = Math.round(height * ratio);
+      }
+      ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+      const styles = getComputedStyle(document.body);
+      const bg = styles.getPropertyValue('--card-2').trim() || '#101933';
+      const border = styles.getPropertyValue('--border').trim() || '#223056';
+      const text = styles.getPropertyValue('--text').trim() || '#eef4ff';
+      const muted = styles.getPropertyValue('--muted').trim() || '#9fb3d9';
+      const upColor = styles.getPropertyValue('--metric-ok').trim() || '#8df1c7';
+      const downColor = styles.getPropertyValue('--metric-warn').trim() || '#ffd782';
+
+      ctx.clearRect(0, 0, width, height);
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, 0, width, height);
+
+      const pad = { left: 54, right: 18, top: 18, bottom: 34 };
+      const plotW = width - pad.left - pad.right;
+      const plotH = height - pad.top - pad.bottom;
+      const xAt = (pct) => pad.left + (plotW * pct / 100.0);
+      const yAt = (pct) => pad.top + plotH - (plotH * pct / 100.0);
+
+      ctx.strokeStyle = border;
+      ctx.lineWidth = 1;
+      for (let pct = 0; pct <= 100; pct += 25) {
+        ctx.beginPath();
+        ctx.moveTo(xAt(pct), pad.top);
+        ctx.lineTo(xAt(pct), pad.top + plotH);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(pad.left, yAt(pct));
+        ctx.lineTo(pad.left + plotW, yAt(pct));
+        ctx.stroke();
+      }
+
+      ctx.strokeStyle = muted;
+      ctx.setLineDash([6, 5]);
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(xAt(0), yAt(0));
+      ctx.lineTo(xAt(100), yAt(100));
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      const drawCurve = (curve, color) => {
+        if (!curve || !Array.isArray(curve.points) || curve.points.length < 2) return;
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        curve.points.forEach((pt, idx) => {
+          const x = xAt(pt.x);
+          const y = yAt(Math.max(-10, Math.min(110, pt.y)));
+          if (idx === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+      };
+
+      drawCurve(result && result.upCurve, upColor);
+      drawCurve(result && result.downCurve, downColor);
+
+      ctx.fillStyle = text;
+      ctx.font = '12px Arial, sans-serif';
+      ctx.fillText('Output %', 10, 18);
+      ctx.fillText('Servo travel %', width - 94, height - 10);
+      ctx.fillStyle = muted;
+      ctx.fillText('Ideal', xAt(100) - 34, yAt(100) - 8);
+      ctx.fillStyle = upColor;
+      ctx.fillText('Up', xAt(100) - 34, yAt(100) + 12);
+      ctx.fillStyle = downColor;
+      ctx.fillText('Down', xAt(100) - 34, yAt(100) + 30);
+
+      if (!result) {
+        ctx.fillStyle = muted;
+        ctx.font = '14px Arial, sans-serif';
+        ctx.fillText('Record a sweep to plot output % versus time-normalized servo travel.', pad.left, pad.top + 28);
+      }
+    }
+
+    function detectLinearityTurningPoints(samples) {
+      if (!Array.isArray(samples) || samples.length < 7) return [];
+      const values = samples.map((sample) => sample.smooth);
+      const minValue = Math.min(...values);
+      const maxValue = Math.max(...values);
+      const range = maxValue - minValue;
+      if (!(range > 0.001)) return [];
+      const slopeEps = Math.max(range * 0.015, 0.02);
+      const swingMin = Math.max(range * 0.12, 0.15);
+      const raw = [];
+      for (let i = 1; i < samples.length - 1; i += 1) {
+        const prev = samples[i].smooth - samples[i - 1].smooth;
+        const next = samples[i + 1].smooth - samples[i].smooth;
+        if (prev > slopeEps && next < -slopeEps) {
+          raw.push({ idx: i, type: 'max', value: samples[i].smooth });
+        } else if (prev < -slopeEps && next > slopeEps) {
+          raw.push({ idx: i, type: 'min', value: samples[i].smooth });
+        }
+      }
+      const compressed = [];
+      raw.forEach((point) => {
+        const last = compressed[compressed.length - 1];
+        if (last && last.type === point.type) {
+          const better = point.type === 'max' ? point.value > last.value : point.value < last.value;
+          if (better) compressed[compressed.length - 1] = point;
+          return;
+        }
+        compressed.push(point);
+      });
+      const filtered = [];
+      compressed.forEach((point) => {
+        const last = filtered[filtered.length - 1];
+        if (!last) {
+          filtered.push(point);
+          return;
+        }
+        if (point.idx - last.idx < 4) return;
+        if (Math.abs(point.value - last.value) < swingMin) return;
+        filtered.push(point);
+      });
+      return filtered;
+    }
+
+    function buildLinearitySegments(samples, turningPoints) {
+      if (!Array.isArray(turningPoints) || turningPoints.length < 2) return [];
+      const values = samples.map((sample) => sample.smooth);
+      const fullRange = Math.max(...values) - Math.min(...values);
+      const minAmplitude = Math.max(fullRange * 0.35, 0.4);
+      const segments = [];
+      for (let i = 0; i < turningPoints.length - 1; i += 1) {
+        const start = turningPoints[i];
+        const end = turningPoints[i + 1];
+        if (end.idx <= start.idx + 4) continue;
+        const startSample = samples[start.idx];
+        const endSample = samples[end.idx];
+        const durationMs = endSample.t - startSample.t;
+        const amplitude = Math.abs(endSample.smooth - startSample.smooth);
+        if (durationMs < 700 || amplitude < minAmplitude) continue;
+        const direction = endSample.smooth > startSample.smooth ? 'up' : 'down';
+        segments.push({
+          direction,
+          startIndex: start.idx,
+          endIndex: end.idx,
+          startValue: startSample.smooth,
+          endValue: endSample.smooth,
+          durationMs,
+          amplitude
+        });
+      }
+      return segments;
+    }
+
+    function resampleLinearitySegment(samples, segment, pointCount = 51) {
+      const startSample = samples[segment.startIndex];
+      const endSample = samples[segment.endIndex];
+      const range = endSample.smooth - startSample.smooth;
+      if (!Number.isFinite(range) || Math.abs(range) < 1e-6) return null;
+      const out = [];
+      let cursor = segment.startIndex;
+      for (let i = 0; i < pointCount; i += 1) {
+        const ratio = i / (pointCount - 1);
+        const targetT = startSample.t + ((endSample.t - startSample.t) * ratio);
+        while (cursor < segment.endIndex - 1 && samples[cursor + 1].t < targetT) cursor += 1;
+        const a = samples[cursor];
+        const b = samples[Math.min(segment.endIndex, cursor + 1)];
+        const dt = Math.max(1, b.t - a.t);
+        const local = Math.max(0, Math.min(1, (targetT - a.t) / dt));
+        const value = a.smooth + ((b.smooth - a.smooth) * local);
+        out.push({
+          x: ratio * 100,
+          y: ((value - startSample.smooth) / range) * 100
+        });
+      }
+      return {
+        direction: segment.direction,
+        points: out,
+        amplitude: segment.amplitude,
+        durationMs: segment.durationMs
+      };
+    }
+
+    function averageLinearityCurves(curves) {
+      if (!Array.isArray(curves) || !curves.length) return null;
+      const pointCount = curves[0].points.length;
+      const points = [];
+      for (let i = 0; i < pointCount; i += 1) {
+        const x = curves[0].points[i].x;
+        let total = 0;
+        curves.forEach((curve) => { total += curve.points[i].y; });
+        points.push({ x, y: total / curves.length });
+      }
+      return { points };
+    }
+
+    function summarizeLinearityCurve(curve) {
+      if (!curve || !curve.points || !curve.points.length) return null;
+      let maxDev = 0;
+      let sumSq = 0;
+      curve.points.forEach((pt) => {
+        const dev = pt.y - pt.x;
+        maxDev = Math.max(maxDev, Math.abs(dev));
+        sumSq += dev * dev;
+      });
+      return {
+        maxDev,
+        rmsDev: Math.sqrt(sumSq / curve.points.length)
+      };
+    }
+
+    function analyzeLinearitySamples(samples) {
+      if (!Array.isArray(samples) || samples.length < 12) {
+        return { ok: false, error: 'Need more live samples. Try a longer recording.' };
+      }
+      const smoothed = samples.map((sample, index) => {
+        let total = 0;
+        let count = 0;
+        for (let i = Math.max(0, index - 2); i <= Math.min(samples.length - 1, index + 2); i += 1) {
+          total += samples[i].value;
+          count += 1;
+        }
+        return {
+          ...sample,
+          smooth: total / Math.max(1, count)
+        };
+      });
+      const values = smoothed.map((sample) => sample.smooth);
+      const minValue = Math.min(...values);
+      const maxValue = Math.max(...values);
+      const fullRange = maxValue - minValue;
+      if (fullRange < 1.0e-3) {
+        return { ok: false, error: 'Sweep amplitude was too small to analyze.' };
+      }
+      const turningPoints = detectLinearityTurningPoints(smoothed);
+      const segments = buildLinearitySegments(smoothed, turningPoints);
+      const curves = segments
+        .map((segment) => resampleLinearitySegment(smoothed, segment))
+        .filter((curve) => !!curve);
+      const upCurves = curves.filter((curve) => curve.direction === 'up');
+      const downCurves = curves.filter((curve) => curve.direction === 'down');
+      if (!upCurves.length && !downCurves.length) {
+        return { ok: false, error: 'Could not detect clean endpoint-to-endpoint sweeps. Try a longer or steadier recording.' };
+      }
+      const upCurve = averageLinearityCurves(upCurves);
+      const downCurve = averageLinearityCurves(downCurves);
+      const upSummary = summarizeLinearityCurve(upCurve);
+      const downSummary = summarizeLinearityCurve(downCurve);
+      let hysteresisMax = 0;
+      if (upCurve && downCurve) {
+        for (let i = 0; i < upCurve.points.length; i += 1) {
+          hysteresisMax = Math.max(hysteresisMax, Math.abs(upCurve.points[i].y - downCurve.points[i].y));
+        }
+      }
+      return {
+        ok: true,
+        sampleCount: samples.length,
+        minValue,
+        maxValue,
+        range: fullRange,
+        segmentCount: segments.length,
+        upCount: upCurves.length,
+        downCount: downCurves.length,
+        upCurve,
+        downCurve,
+        upSummary,
+        downSummary,
+        hysteresisMax
+      };
+    }
+
+    function renderLinearityResult(result) {
+      resetLinearityMetrics();
+      if (!result || !result.ok) {
+        drawLinearityChart(null);
+        if (result && result.error) setLinearityStatus(result.error);
+        return;
+      }
+      const measurement = getLinearityMeasurement(lastLiveState);
+      const unit = (measurement && measurement.ok) ? measurement.unit : '';
+      const label = (measurement && measurement.ok) ? measurement.label : linearySourceMetaName(linearitySourceEl.value);
+      linearityCaptureMetricEl.textContent = `${result.segmentCount} sweeps`;
+      linearityCaptureMetricEl.classList.add('ok');
+      linearityCaptureCaptionEl.textContent = `${label} range ${result.minValue.toFixed(currentDisplayDecimals)} to ${result.maxValue.toFixed(currentDisplayDecimals)}${unit}. Averaged ${result.upCount} up and ${result.downCount} down sweeps from ${result.sampleCount} samples.`;
+
+      const maxDev = Math.max(result.upSummary ? result.upSummary.maxDev : 0, result.downSummary ? result.downSummary.maxDev : 0);
+      const rmsParts = [];
+      if (result.upSummary) rmsParts.push(`UP RMS ${result.upSummary.rmsDev.toFixed(1)}%`);
+      if (result.downSummary) rmsParts.push(`DOWN RMS ${result.downSummary.rmsDev.toFixed(1)}%`);
+      linearityDeviationMetricEl.textContent = `${maxDev.toFixed(1)}%`;
+      linearityDeviationMetricEl.classList.add(maxDev <= 5 ? 'ok' : 'warn');
+      linearityDeviationCaptionEl.textContent = `Peak deviation from ideal straight-line response. ${rmsParts.join(' | ') || 'Need at least one valid sweep direction.'}`;
+
+      linearityHysteresisMetricEl.textContent = `${result.hysteresisMax.toFixed(1)}%`;
+      linearityHysteresisMetricEl.classList.add(result.hysteresisMax <= 4 ? 'ok' : 'warn');
+      linearityHysteresisCaptionEl.textContent = result.upCurve && result.downCurve
+        ? 'Maximum separation between averaged up and down sweeps.'
+        : 'Record both directions to quantify hysteresis.';
+      setLinearityStatus(`Analysis complete. ${result.segmentCount} usable sweeps detected from the recorded trace.`);
+      drawLinearityChart(result);
+    }
+
+    function clearLinearityCapture() {
+      linearityCapture.recording = false;
+      linearityCapture.samples = [];
+      linearityCapture.result = null;
+      linearityRecordBtn.disabled = false;
+      linearityStopBtn.disabled = true;
+      setLinearityStatus('Ready. Start the servo sweep, then press Record.');
+      resetLinearityMetrics();
+      drawLinearityChart(null);
+    }
+
+    function stopLinearityCapture(autoStop = false) {
+      if (!linearityCapture.recording) return;
+      linearityCapture.recording = false;
+      linearityRecordBtn.disabled = false;
+      linearityStopBtn.disabled = true;
+      const result = analyzeLinearitySamples(linearityCapture.samples);
+      linearityCapture.result = result.ok ? result : null;
+      if (!result.ok) {
+        setLinearityStatus(result.error);
+        resetLinearityMetrics();
+        drawLinearityChart(null);
+        return;
+      }
+      renderLinearityResult(result);
+      if (autoStop) {
+        setLinearityStatus(`Recording stopped after ${Math.round(linearityCapture.durationMs / 1000)} s. ${result.segmentCount} usable sweeps detected.`);
+      }
+    }
+
+    function startLinearityCapture() {
+      const measurement = getLinearityMeasurement(lastLiveState);
+      if (!measurement.ok) {
+        setLinearityStatus(measurement.reason);
+        return;
+      }
+      linearityCapture.recording = true;
+      linearityCapture.startedAtMs = Date.now();
+      linearityCapture.durationMs = sanitizeLinearityDuration(linearityDurationEl.value) * 1000;
+      linearityCapture.samples = [];
+      linearityCapture.result = null;
+      linearityDurationEl.value = String(sanitizeLinearityDuration(linearityDurationEl.value));
+      linearityRecordBtn.disabled = true;
+      linearityStopBtn.disabled = false;
+      saveLinearityPrefs();
+      resetLinearityMetrics();
+      drawLinearityChart(null);
+      setLinearityStatus(`Recording ${measurement.label} for ${Math.round(linearityCapture.durationMs / 1000)} s. Keep the servo sweeping continuously.`);
+    }
+
+    function sampleLinearity(s) {
+      if (!linearityCapture.recording) return;
+      const measurement = getLinearityMeasurement(s);
+      if (!measurement.ok) {
+        stopLinearityCapture(false);
+        setLinearityStatus(measurement.reason);
+        return;
+      }
+      const elapsedMs = Date.now() - linearityCapture.startedAtMs;
+      linearityCapture.samples.push({
+        t: elapsedMs,
+        value: measurement.value
+      });
+      linearityCaptureMetricEl.textContent = `${linearityCapture.samples.length} samples`;
+      linearityCaptureCaptionEl.textContent = `${measurement.label} live: ${measurement.value.toFixed(currentDisplayDecimals)}${measurement.unit}.`;
+      if (elapsedMs >= linearityCapture.durationMs) {
+        stopLinearityCapture(true);
+      } else {
+        setLinearityStatus(`Recording... ${(elapsedMs / 1000).toFixed(1)} / ${(linearityCapture.durationMs / 1000).toFixed(0)} s`);
+      }
+    }
+
+    function stopGuideAudio() {
+      if (guideAudioGain && guideAudioCtx) {
+        guideAudioGain.gain.setTargetAtTime(0.0001, guideAudioCtx.currentTime, 0.02);
+      }
+    }
+
+    function setGuideAudioMessage(text) {
+      dispAudioStatusEl.textContent = text;
+    }
+
+    async function ensureGuideAudio() {
+      if (guideAudioCtx) return guideAudioCtx;
+      const Ctor = window.AudioContext || window.webkitAudioContext;
+      if (!Ctor) return null;
+      guideAudioCtx = new Ctor();
+      guideAudioOsc = guideAudioCtx.createOscillator();
+      guideAudioGain = guideAudioCtx.createGain();
+      guideAudioOsc.type = 'sine';
+      guideAudioOsc.frequency.value = 660;
+      guideAudioGain.gain.value = 0.0001;
+      guideAudioOsc.connect(guideAudioGain);
+      guideAudioGain.connect(guideAudioCtx.destination);
+      guideAudioOsc.start();
+      return guideAudioCtx;
+    }
+
+    async function armGuideAudio() {
+      const ctx = await ensureGuideAudio();
+      if (!ctx) {
+        setGuideAudioMessage('Audio unavailable in this browser.');
+        return;
+      }
+      try {
+        await ctx.resume();
+        guideAudioUnlocked = true;
+        dispAudioArmBtn.textContent = 'Audio Ready';
+        renderDisplacement(lastLiveState);
+      } catch (e) {
+        setGuideAudioMessage('Audio could not be enabled.');
+      }
+    }
+
+    function updateGuideAudio(guide) {
+      if (!dispAudioEnabledEl.checked) {
+        stopGuideAudio();
+        setGuideAudioMessage('Audio cues are off.');
+        return;
+      }
+      if (!guideAudioUnlocked) {
+        stopGuideAudio();
+        setGuideAudioMessage('Tap Enable Audio to allow browser beeps.');
+        return;
+      }
+      if (!guide || !guide.hasGuide) {
+        stopGuideAudio();
+        setGuideAudioMessage('Enter targets to use audio cues.');
+        return;
+      }
+      if (!guideAudioCtx || !guideAudioOsc || !guideAudioGain) {
+        setGuideAudioMessage('Audio preparing...');
+        return;
+      }
+
+      const now = Date.now();
+      if (guide.withinTolerance) {
+        guideAudioOsc.frequency.setTargetAtTime(880, guideAudioCtx.currentTime, 0.01);
+        guideAudioGain.gain.setTargetAtTime(0.035, guideAudioCtx.currentTime, 0.02);
+        setGuideAudioMessage('Solid tone: within tolerance.');
+        return;
+      }
+
+      if (guide.deltaAbs <= guide.approachWindow) {
+        const ratio = Math.max(0, Math.min(1, (guide.approachWindow - guide.deltaAbs) / Math.max(guide.approachWindow, 0.001)));
+        const intervalMs = 850 - (ratio * 620);
+        guideAudioOsc.frequency.setTargetAtTime(580 + (ratio * 140), guideAudioCtx.currentTime, 0.01);
+        if ((now - guideAudioLastPulseMs) >= intervalMs) {
+          guideAudioLastPulseMs = now;
+          guideAudioPulseUntilMs = now + 120;
+        }
+        const pulseActive = now < guideAudioPulseUntilMs;
+        guideAudioGain.gain.setTargetAtTime(pulseActive ? 0.035 : 0.0001, guideAudioCtx.currentTime, 0.02);
+        setGuideAudioMessage('Beeping faster as you approach target.');
+        return;
+      }
+
+      stopGuideAudio();
+      setGuideAudioMessage('Outside approach window.');
+    }
+
+    function renderDisplacement(s) {
+      const label = displacementLabelText();
+      const rawAxis = (dispAxisEl.value === 'pitch' || dispAxisEl.value === 'roll') ? dispAxisEl.value : 'auto';
+      const axis = rawAxis === 'auto' ? resolveAutoAxis(s) : rawAxis;
+      const axisText = axis === 'pitch' ? 'PITCH' : 'ROLL';
+      const sourceText = axisChoiceText(rawAxis, axis, s);
+      const unit = sanitizeUnitText(dispUnitEl.value);
+      const depth = Number(dispDepthEl.value);
+      const decimals = currentDisplayDecimals;
+      const targetMode = dispTargetModeEl.value === 'angle' ? 'angle' : 'displacement';
+      const targetUp = Number(dispTargetUpEl.value);
+      const targetDown = Number(dispTargetDownEl.value);
+      const tolerance = sanitizeTolerance(dispToleranceEl.value);
+      const manualApproachWindow = sanitizePositiveOptional(dispApproachWindowEl.value);
+      const metricMeta = setupMetricMeta(targetMode, unit);
+
+      dispHeadingEl.textContent = `Live ${label}`;
+      dispTargetHeadingEl.textContent = `${targetMode === 'angle' ? 'Angle' : 'Displacement'} Target`;
+      dispTargetValueEl.classList.remove('ok', 'warn');
+
+      if (!s) {
+        dispValueEl.textContent = '--';
+        dispAngleEl.textContent = '--';
+        dispCaptionEl.textContent = 'Waiting for live angle data.';
+        dispFormulaEl.textContent = 'Using live angle from the selected axis.';
+        dispTargetValueEl.textContent = '--';
+        dispTargetCaptionEl.textContent = 'Waiting for live angle data.';
+        dispPresetHintEl.textContent = presetDefinition(dispPresetEl.value).hint;
+        updateGuideAudio({ hasGuide: false });
+        return;
+      }
+
+      const angle = Number(axis === 'pitch' ? s.pitch : s.roll);
+      if (!Number.isFinite(angle)) {
+        dispValueEl.textContent = '--';
+        dispAngleEl.textContent = '--';
+        dispCaptionEl.textContent = 'Selected angle is unavailable.';
+        dispFormulaEl.textContent = `Source axis: ${sourceText}.`;
+        dispTargetValueEl.textContent = '--';
+        dispTargetCaptionEl.textContent = 'Selected angle is unavailable.';
+        dispPresetHintEl.textContent = presetDefinition(dispPresetEl.value).hint;
+        updateGuideAudio({ hasGuide: false });
+        return;
+      }
+
+      dispAngleEl.textContent = `${angle >= 0 ? '+' : ''}${angle.toFixed(decimals)}\u00B0`;
+
+      if (!Number.isFinite(depth) || depth <= 0) {
+        dispValueEl.textContent = '--';
+        dispCaptionEl.textContent = `Enter ${label.toLowerCase()} depth to calculate displacement.`;
+        dispFormulaEl.textContent = `Source axis: ${sourceText}. Formula: depth \u00D7 sin(angle).`;
+        if (targetMode === 'displacement') {
+          dispTargetValueEl.textContent = '--';
+          dispTargetCaptionEl.textContent = `Enter ${label.toLowerCase()} depth before using displacement targets.`;
+          dispPresetHintEl.textContent = presetDefinition(dispPresetEl.value).hint;
+          updateGuideAudio({ hasGuide: false });
+          return;
+        }
+      }
+
+      const displacement = Number.isFinite(depth) && depth > 0
+        ? depth * Math.sin(angle * Math.PI / 180.0)
+        : NaN;
+      const magnitude = Number.isFinite(displacement) ? Math.abs(displacement) : NaN;
+      const direction = displacement > 0 ? 'positive' : (displacement < 0 ? 'negative' : 'neutral');
+
+      if (Number.isFinite(displacement)) {
+        dispValueEl.textContent = `${displacement >= 0 ? '+' : ''}${displacement.toFixed(decimals)} ${unit}`;
+        dispCaptionEl.textContent = `${label} displacement from ${axisText}; magnitude ${magnitude.toFixed(decimals)} ${unit} (${direction}).`;
+        dispFormulaEl.textContent = `Source axis: ${sourceText}. Formula: ${depth.toFixed(decimals)} ${unit} \u00D7 sin(${angle.toFixed(decimals)}\u00B0).`;
+      } else {
+        dispValueEl.textContent = '--';
+      }
+
+      const currentValue = targetMode === 'angle' ? angle : displacement;
+      const currentDirection = Number.isFinite(currentValue) && currentValue < 0 ? 'down' : 'up';
+      const targetValue = currentDirection === 'down' ? targetDown : targetUp;
+      const hasTargetValue = Number.isFinite(targetValue);
+      const hasGuide = Number.isFinite(currentValue) && hasTargetValue;
+
+      if (!hasTargetValue) {
+        dispTargetValueEl.textContent = '--';
+        dispTargetCaptionEl.textContent = `Enter ${currentDirection} target in ${metricMeta.label} mode.`;
+        updateGuideAudio({ hasGuide: false });
+        return;
+      }
+
+      const delta = targetValue - currentValue;
+      const deltaAbs = Math.abs(delta);
+      const withinTolerance = deltaAbs <= tolerance;
+      const targetLabel = currentDirection === 'down' ? 'DOWN' : 'UP';
+      const autoApproachWindow = Math.max(tolerance * 4.0, metricMeta.window);
+      const approachWindow = Number.isFinite(manualApproachWindow) ? manualApproachWindow : autoApproachWindow;
+      const deltaText = signedNumberText(delta, decimals, metricMeta.suffix);
+
+      dispTargetValueEl.textContent = `${targetLabel} ${signedNumberText(targetValue, decimals, metricMeta.suffix)}`;
+      dispTargetValueEl.classList.add(withinTolerance ? 'ok' : 'warn');
+      if (withinTolerance) {
+        dispTargetCaptionEl.textContent = `On target. Current ${metricMeta.label}: ${signedNumberText(currentValue, decimals, metricMeta.suffix)} within \u00B1${tolerance.toFixed(decimals)}${metricMeta.suffix}. Audio window ${approachWindow.toFixed(decimals)}${metricMeta.suffix}.`;
+      } else {
+        dispTargetCaptionEl.textContent = `${targetLabel} target active. Current ${metricMeta.label}: ${signedNumberText(currentValue, decimals, metricMeta.suffix)}. Delta ${deltaText}. Tolerance \u00B1${tolerance.toFixed(decimals)}${metricMeta.suffix}. Audio window ${approachWindow.toFixed(decimals)}${metricMeta.suffix}.`;
+      }
+
+      updateGuideAudio({
+        hasGuide,
+        withinTolerance,
+        deltaAbs,
+        approachWindow
+      });
+      dispPresetHintEl.textContent = `${presetDefinition(dispPresetEl.value).hint} Current source: ${sourceText}.`;
     }
 
     function vec2(x, y, d = 3) {
@@ -474,13 +1682,21 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
     }
 
     function renderNetwork(s) {
+      currentDisplayDecimals = sanitizeDisplayPrecision(s.display_precision);
+      const brightnessPct = sanitizeDisplayBrightness(s.display_brightness_pct);
+      const batteryModeText = String(s.battery_mode || 'auto').toUpperCase();
+      const zeroOnBoot = (s.zero_on_boot !== false);
+      const touchEnabled = (s.touch_enabled !== false);
+      const touchPersist = !!s.touch_persist;
+      const deviceBits = [`Battery ${batteryModeText}`, `Startup ZERO ${zeroOnBoot ? 'ON' : 'OFF'}`];
+      deviceBits.push(`Readout ${currentDisplayDecimals}dp`);
+      deviceBits.push(`Brightness ${brightnessPct}%`);
+      deviceBits.push(`Touch ${touchEnabled ? 'ON' : 'OFF'}${touchPersist ? ' (persist)' : ''}`);
+      deviceStatusEl.textContent = deviceBits.join(' | ');
+
       const mode = String(s.net_mode || 'AP');
       const pref = String(s.net_pref || 'ap').toUpperCase();
-      const batteryMode = String(s.battery_mode || 'auto').toUpperCase();
-      const zeroOnBoot = (s.zero_on_boot !== false);
       const statusBits = [`Mode ${mode}`, `Preference ${pref}`];
-      statusBits.push(`Battery ${batteryMode}`);
-      statusBits.push(`Startup ZERO ${zeroOnBoot ? 'ON' : 'OFF'}`);
       if (s.sta_connected) statusBits.push('STA connected');
       if (s.ap_active) statusBits.push('AP active');
       netStatusEl.textContent = statusBits.join(' | ');
@@ -491,17 +1707,27 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
       if (s.hostname_local) addrBits.push(`Host ${s.hostname_local}`);
       netAddrEl.textContent = addrBits.join(' | ');
 
+      if (!deviceFormDirty) {
+        const batteryMode = String(s.battery_mode || 'auto').toLowerCase();
+        deviceBatteryModeEl.value = (batteryMode === 'present' || batteryMode === 'absent') ? batteryMode : 'auto';
+        deviceZeroOnBootEl.value = (s.zero_on_boot === false) ? 'off' : 'on';
+        deviceDisplayPrecisionEl.value = String(currentDisplayDecimals);
+        deviceTouchEnabledEl.value = touchEnabled ? 'on' : 'off';
+        deviceTouchPersistEl.checked = touchPersist;
+        deviceDisplayBrightnessEl.value = String(brightnessPct);
+        syncBrightnessLabel();
+      }
+
       if (!networkFormDirty) {
         netModeEl.value = (String(s.net_pref || 'ap').toLowerCase() === 'sta') ? 'sta' : 'ap';
-        const batteryMode = String(s.battery_mode || 'auto').toLowerCase();
-        netBatteryModeEl.value = (batteryMode === 'present' || batteryMode === 'absent') ? batteryMode : 'auto';
-        netZeroOnBootEl.value = (s.zero_on_boot === false) ? 'off' : 'on';
         netHostnameEl.value = s.hostname || '';
         netSsidEl.value = s.sta_ssid || '';
       }
     }
 
     function applyLiveState(s) {
+      currentDisplayDecimals = sanitizeDisplayPrecision(s.display_precision);
+      lastLiveState = s;
       rollEl.textContent = fmt(s.roll);
       pitchEl.textContent = fmt(s.pitch);
       setAngleClass(rollEl, s.roll);
@@ -547,10 +1773,13 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
       } else {
         batEl.textContent = 'Battery telemetry unavailable';
       }
+      renderDisplacement(s);
+      sampleLinearity(s);
     }
 
     async function refreshLive() {
-      if (otaUploadInFlight) return;
+      if (otaUploadInFlight || liveRefreshInFlight) return;
+      liveRefreshInFlight = true;
       try {
         const r = await fetch('/api/live', { cache: 'no-store' });
         const s = await r.json();
@@ -558,11 +1787,16 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
       } catch (e) {
         statusEl.textContent = 'Disconnected';
         batEl.textContent = 'Battery telemetry unavailable';
+        lastLiveState = null;
+        renderDisplacement(null);
+      } finally {
+        liveRefreshInFlight = false;
       }
     }
 
     async function refreshState() {
-      if (otaUploadInFlight) return;
+      if (otaUploadInFlight || stateRefreshInFlight) return;
+      stateRefreshInFlight = true;
       try {
         const r = await fetch('/api/state', { cache: 'no-store' });
         const s = await r.json();
@@ -609,26 +1843,27 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
         }
       } catch (e) {
         clearDiag(true);
+      } finally {
+        stateRefreshInFlight = false;
       }
     }
 
     async function refreshNetwork() {
-      if (otaUploadInFlight) return;
+      if (otaUploadInFlight || networkRefreshInFlight) return;
+      networkRefreshInFlight = true;
       try {
         const r = await fetch('/api/network', { cache: 'no-store' });
         const s = await r.json();
         renderNetwork(s);
       } catch (e) {
         netStatusEl.textContent = 'Network status unavailable';
+      } finally {
+        networkRefreshInFlight = false;
       }
     }
 
     async function saveNetwork() {
       const mode = netModeEl.value === 'sta' ? 'sta' : 'ap';
-      const batteryMode = netBatteryModeEl.value === 'present'
-        ? 'present'
-        : (netBatteryModeEl.value === 'absent' ? 'absent' : 'auto');
-      const zeroOnBoot = (netZeroOnBootEl.value === 'off') ? 'off' : 'on';
       const ssid = netSsidEl.value.trim();
       const hostname = netHostnameEl.value.trim();
       const password = netPasswordEl.value;
@@ -639,12 +1874,10 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
       }
 
       netSaveBtn.disabled = true;
-      netMsgEl.textContent = 'Saving settings...';
+      netMsgEl.textContent = 'Saving network...';
       try {
         const body = new URLSearchParams();
         body.set('mode', mode);
-        body.set('battery_mode', batteryMode);
-        body.set('zero_on_boot', zeroOnBoot);
         body.set('ssid', ssid);
         body.set('hostname', hostname);
         if (password.length > 0) body.set('password', password);
@@ -656,16 +1889,59 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
         });
         const out = await r.json();
         if (out.ok) {
-          netMsgEl.textContent = 'Settings applied.';
+          netMsgEl.textContent = 'Network settings applied.';
           netPasswordEl.value = '';
           networkFormDirty = false;
         } else {
-          netMsgEl.textContent = `Save failed: ${out.error || 'unknown error'}`;
+          netMsgEl.textContent = `Network save failed: ${out.error || 'unknown error'}`;
         }
       } catch (e) {
-        netMsgEl.textContent = 'Save failed.';
+        netMsgEl.textContent = 'Network save failed.';
       } finally {
         netSaveBtn.disabled = false;
+      }
+      setTimeout(refreshNetwork, 120);
+      setTimeout(refreshState, 120);
+      setTimeout(refreshLive, 120);
+    }
+
+    async function saveDeviceSettings() {
+      const batteryMode = deviceBatteryModeEl.value === 'present'
+        ? 'present'
+        : (deviceBatteryModeEl.value === 'absent' ? 'absent' : 'auto');
+      const zeroOnBoot = (deviceZeroOnBootEl.value === 'off') ? 'off' : 'on';
+      const displayPrecision = String(sanitizeDisplayPrecision(deviceDisplayPrecisionEl.value));
+      const touchEnabled = deviceTouchEnabledEl.value === 'off' ? 'off' : 'on';
+      const touchPersist = deviceTouchPersistEl.checked ? 'on' : 'off';
+      const displayBrightness = String(sanitizeDisplayBrightness(deviceDisplayBrightnessEl.value));
+
+      deviceSaveBtn.disabled = true;
+      deviceMsgEl.textContent = 'Saving device settings...';
+      try {
+        const body = new URLSearchParams();
+        body.set('battery_mode', batteryMode);
+        body.set('zero_on_boot', zeroOnBoot);
+        body.set('display_precision', displayPrecision);
+        body.set('touch_enabled', touchEnabled);
+        body.set('touch_persist', touchPersist);
+        body.set('display_brightness', displayBrightness);
+
+        const r = await fetch('/api/network', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: body.toString()
+        });
+        const out = await r.json();
+        if (out.ok) {
+          deviceMsgEl.textContent = 'Device settings applied.';
+          deviceFormDirty = false;
+        } else {
+          deviceMsgEl.textContent = `Device save failed: ${out.error || 'unknown error'}`;
+        }
+      } catch (e) {
+        deviceMsgEl.textContent = 'Device save failed.';
+      } finally {
+        deviceSaveBtn.disabled = false;
       }
       setTimeout(refreshNetwork, 120);
       setTimeout(refreshState, 120);
@@ -832,6 +2108,12 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
       setTimeout(refreshState, 80);
     }
 
+    loadWebTheme();
+    loadDisplacementPrefs();
+    loadLinearityPrefs();
+    syncBrightnessLabel();
+    renderDisplacement(null);
+    drawLinearityChart(null);
     refreshLive();
     refreshState();
     refreshNetwork();
@@ -930,6 +2212,27 @@ BatteryPresenceMode parse_battery_presence_mode(const String &raw) {
     return BATTERY_PRESENCE_FORCE_ABSENT;
   }
   return BATTERY_PRESENCE_AUTO;
+}
+
+DisplayPrecisionMode parse_display_precision_mode(const String &raw) {
+  String s = raw;
+  s.trim();
+  const int value = s.toInt();
+  if (value == 1) return DISPLAY_PRECISION_1DP;
+  if (value == 3) return DISPLAY_PRECISION_3DP;
+  return DISPLAY_PRECISION_2DP;
+}
+
+uint8_t parse_display_brightness_percent(const String &raw) {
+  String s = raw;
+  s.trim();
+  const int value = s.toInt();
+  if (value < 10) return 10;
+  if (value > 100) return 100;
+  const int rounded = ((value + 2) / 5) * 5;
+  if (rounded < 10) return 10;
+  if (rounded > 100) return 100;
+  return (uint8_t)rounded;
 }
 
 void sanitize_hostname(const String &raw, char *dst, size_t dst_size) {
@@ -1350,6 +2653,10 @@ void send_network_state_json(bool ok = true, const char *error = nullptr, int co
     "\"net_mode\":\"%s\",\"net_pref\":\"%s\","
     "\"battery_mode\":\"%s\","
     "\"zero_on_boot\":%s,"
+    "\"display_precision\":%d,"
+    "\"touch_enabled\":%s,"
+    "\"touch_persist\":%s,"
+    "\"display_brightness_pct\":%d,"
     "\"hostname\":\"%s\",\"hostname_local\":\"%s\","
     "\"sta_ssid\":\"%s\",\"sta_connected\":%s,\"sta_ip\":\"%s\","
     "\"ap_active\":%s,\"ap_ssid\":\"%s\",\"ap_ip\":\"%s\","
@@ -1359,6 +2666,10 @@ void send_network_state_json(bool ok = true, const char *error = nullptr, int co
     mode_esc, pref_esc,
     battery_presence_mode_to_pref(getBatteryPresenceMode()),
     getAutoZeroOnBootEnabled() ? "true" : "false",
+    (int)getDisplayPrecisionMode(),
+    getTouchInputEnabled() ? "true" : "false",
+    getTouchLockPersistent() ? "true" : "false",
+    (int)getDisplayBrightnessPercent(),
     host_esc, host_local_esc,
     ssid_esc, sta_connected ? "true" : "false", sta_ip_esc,
     ap_active ? "true" : "false", ap_ssid_esc, ap_ip_esc,
@@ -1382,6 +2693,7 @@ void handle_live() {
 
   const float roll = get_display_roll();
   const float pitch = get_display_pitch();
+  const int display_precision = (int)getDisplayPrecisionMode();
   const float roll_cond_pct = rollConditionPercent();
   const bool roll_cond_low = rollConditionIsLow();
   BatteryTelemetry battery = {};
@@ -1390,20 +2702,22 @@ void handle_live() {
   snprintf(
     json,
     sizeof(json),
-    "{\"fw\":\"%s\",\"roll\":%.2f,\"pitch\":%.2f,"
+    "{\"fw\":\"%s\",\"roll\":%.*f,\"pitch\":%.*f,"
     "\"orientation\":\"%s\",\"axis\":\"%s\",\"axis_id\":%d,\"rotation\":%d,\"live\":\"%s\","
+    "\"display_precision\":%d,"
     "\"roll_cond_pct\":%.1f,\"roll_cond_low\":%s,"
     "\"battery_valid\":%s,\"battery_voltage_v\":%.2f,\"battery_soc_pct\":%.1f,"
     "\"battery_charging\":%s,\"battery_charging_inferred\":%s,"
     "\"battery_present\":%s,\"battery_present_inferred\":%s}",
     fw_esc,
-    roll,
-    pitch,
+    display_precision, roll,
+    display_precision, pitch,
     orient_esc,
     axis_esc,
     (int)getAxisMode(),
     displayRotated ? 180 : 0,
     live_esc,
+    display_precision,
     roll_cond_pct,
     roll_cond_low ? "true" : "false",
     battery.valid ? "true" : "false",
@@ -1447,6 +2761,7 @@ void handle_state() {
   const bool roll_cond_low = rollConditionIsLow();
   const float roll = get_display_roll();
   const float pitch = get_display_pitch();
+  const int display_precision = (int)getDisplayPrecisionMode();
   BatteryTelemetry battery = {};
   getBatteryTelemetry(&battery);
 
@@ -1461,8 +2776,9 @@ void handle_state() {
   int written = snprintf(
     state_json_buf,
     sizeof(state_json_buf),
-    "{\"fw\":\"%s\",\"roll\":%.2f,\"pitch\":%.2f,"
+    "{\"fw\":\"%s\",\"roll\":%.*f,\"pitch\":%.*f,"
     "\"orientation\":\"%s\",\"axis\":\"%s\",\"axis_id\":%d,\"rotation\":%d,\"live\":\"%s\","
+    "\"display_precision\":%d,"
     "\"align_active\":%s,\"align_instruction\":\"%s\","
     "\"align_capture_active\":%s,\"align_capture_pct\":%.1f,"
     "\"roll_cond_pct\":%.1f,\"roll_cond_low\":%s,"
@@ -1481,13 +2797,14 @@ void handle_state() {
     "\"zero_roll\":%.3f,\"zero_pitch\":%.3f,"
     "\"align_roll\":%.3f,\"align_pitch\":%.3f}",
     state_fw_esc,
-    roll,
-    pitch,
+    display_precision, roll,
+    display_precision, pitch,
     state_orient_esc,
     state_axis_esc,
     (int)getAxisMode(),
     displayRotated ? 180 : 0,
     state_live_esc,
+    display_precision,
     alignmentIsActive() ? "true" : "false",
     state_align_esc,
     align_capture_active ? "true" : "false",
@@ -1528,9 +2845,9 @@ void handle_state() {
     snprintf(
       state_json_buf,
       sizeof(state_json_buf),
-      "{\"fw\":\"%s\",\"roll\":%.2f,\"pitch\":%.2f,"
+      "{\"fw\":\"%s\",\"roll\":%.*f,\"pitch\":%.*f,"
       "\"orientation\":\"%s\",\"axis\":\"%s\",\"axis_id\":%d,"
-      "\"rotation\":%d,\"live\":\"%s\",\"align_active\":%s,"
+      "\"rotation\":%d,\"live\":\"%s\",\"display_precision\":%d,\"align_active\":%s,"
       "\"align_instruction\":\"\",\"align_capture_active\":false,\"align_capture_pct\":0.0,"
       "\"roll_cond_pct\":100.0,\"roll_cond_low\":false,"
       "\"battery_valid\":false,\"battery_voltage_v\":0.0,\"battery_soc_pct\":0.0,"
@@ -1548,13 +2865,14 @@ void handle_state() {
       "\"zero_roll\":0.0,\"zero_pitch\":0.0,"
       "\"align_roll\":0.0,\"align_pitch\":0.0}",
       state_fw_esc,
-      roll,
-      pitch,
+      display_precision, roll,
+      display_precision, pitch,
       state_orient_esc,
       state_axis_esc,
       (int)getAxisMode(),
       displayRotated ? 180 : 0,
       state_live_esc,
+      display_precision,
       alignmentIsActive() ? "true" : "false",
       mode_active ? "true" : "false",
       state_mode_target_esc,
@@ -1668,6 +2986,10 @@ void handle_network_post() {
   const String mode_in = get_request_value("mode");
   const String battery_mode_in = get_request_value("battery_mode");
   const String zero_on_boot_in = get_request_value("zero_on_boot");
+  const String display_precision_in = get_request_value("display_precision");
+  const String touch_enabled_in = get_request_value("touch_enabled");
+  const String touch_persist_in = get_request_value("touch_persist");
+  const String display_brightness_in = get_request_value("display_brightness");
   const String ssid_in = get_request_value("ssid");
   const String pass_in = get_request_value("password");
   const String host_in = get_request_value("hostname");
@@ -1675,6 +2997,10 @@ void handle_network_post() {
   bool update_mode = mode_in.length() > 0;
   bool update_battery_mode = battery_mode_in.length() > 0 || server.hasArg("battery_mode");
   bool update_zero_on_boot = zero_on_boot_in.length() > 0 || server.hasArg("zero_on_boot");
+  bool update_display_precision = display_precision_in.length() > 0 || server.hasArg("display_precision");
+  bool update_touch_enabled = touch_enabled_in.length() > 0 || server.hasArg("touch_enabled");
+  bool update_touch_persist = touch_persist_in.length() > 0 || server.hasArg("touch_persist");
+  bool update_display_brightness = display_brightness_in.length() > 0 || server.hasArg("display_brightness");
   bool update_ssid = ssid_in.length() > 0 || server.hasArg("ssid");
   bool update_pass = pass_in.length() > 0 || server.hasArg("password");
   bool update_host = host_in.length() > 0 || server.hasArg("hostname");
@@ -1694,6 +3020,18 @@ void handle_network_post() {
   }
   if (update_zero_on_boot) {
     setAutoZeroOnBootEnabled(parse_bool_flag(zero_on_boot_in));
+  }
+  if (update_display_precision) {
+    setDisplayPrecisionMode(parse_display_precision_mode(display_precision_in));
+  }
+  if (update_touch_persist) {
+    setTouchLockPersistent(parse_bool_flag(touch_persist_in));
+  }
+  if (update_touch_enabled) {
+    setTouchInputEnabled(parse_bool_flag(touch_enabled_in));
+  }
+  if (update_display_brightness) {
+    setDisplayBrightnessPercent(parse_display_brightness_percent(display_brightness_in));
   }
   if (update_ssid) {
     copy_cstr(net_cfg.sta_ssid, sizeof(net_cfg.sta_ssid), ssid_in.c_str());
@@ -1903,7 +3241,7 @@ void handle_root() {
   server.sendHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
   server.sendHeader("Pragma", "no-cache");
   server.sendHeader("Expires", "0");
-  server.send(200, "text/html", PAGE_HTML);
+  server.send_P(200, "text/html", PAGE_HTML);
 }
 
 void handle_health() {

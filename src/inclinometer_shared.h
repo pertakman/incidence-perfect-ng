@@ -23,6 +23,12 @@ enum TouchUiLayoutMode {
   TOUCH_UI_SIMPLE = 1
 };
 
+enum DisplayPrecisionMode {
+  DISPLAY_PRECISION_1DP = 1,
+  DISPLAY_PRECISION_2DP = 2,
+  DISPLAY_PRECISION_3DP = 3
+};
+
 extern OrientationMode orientationMode;
 extern bool displayRotated;
 extern volatile AxisDisplayMode ui_axis_mode;
@@ -105,6 +111,14 @@ BatteryPresenceMode getBatteryPresenceMode(void);
 void setBatteryPresenceMode(BatteryPresenceMode mode);
 bool getAutoZeroOnBootEnabled(void);
 void setAutoZeroOnBootEnabled(bool enabled);
+DisplayPrecisionMode getDisplayPrecisionMode(void);
+void setDisplayPrecisionMode(DisplayPrecisionMode mode);
+uint8_t getDisplayBrightnessPercent(void);
+void setDisplayBrightnessPercent(uint8_t percent);
+bool getTouchInputEnabled(void);
+void setTouchInputEnabled(bool enabled);
+bool getTouchLockPersistent(void);
+void setTouchLockPersistent(bool enabled);
 void requestDeepSleep(void);
 bool bootHoldIsActive(void);
 unsigned long bootHoldDurationMs(void);
