@@ -174,6 +174,7 @@ static QMI8658_Data lastSensorData = {};
 static bool lastSensorDataValid = false;
 static bool rawStreamEnabled = false;
 static unsigned long rawStreamLastMs = 0;
+static unsigned long liveStreamLastMs = 0;
 static float rollConditionPct = 100.0f;
 static bool rollConditionLowFlag = false;
 static bool serialOutputPaused = false;
@@ -775,21 +776,24 @@ void loop_inclinometer() {
              !modeWorkflowIsActive() &&
              !zeroPending &&
              !offsetCalPending) {
-    switch (ui_axis_mode) {
-      case AXIS_ROLL:
-        Serial.print("Roll: ");
-        Serial.println(r, 2);
-        break;
-      case AXIS_PITCH:
-        Serial.print("Pitch: ");
-        Serial.println(p, 2);
-        break;
-      default:
-        Serial.print("Roll: ");
-        Serial.print(r, 2);
-        Serial.print("  Pitch: ");
-        Serial.println(p, 2);
-        break;
+    if ((now - liveStreamLastMs) >= 250) { // keep the default stream readable without starving the loop
+      switch (ui_axis_mode) {
+        case AXIS_ROLL:
+          Serial.print("Roll: ");
+          Serial.println(r, 2);
+          break;
+        case AXIS_PITCH:
+          Serial.print("Pitch: ");
+          Serial.println(p, 2);
+          break;
+        default:
+          Serial.print("Roll: ");
+          Serial.print(r, 2);
+          Serial.print("  Pitch: ");
+          Serial.println(p, 2);
+          break;
+      }
+      liveStreamLastMs = now;
     }
   }
 
@@ -1895,7 +1899,6 @@ void printMode() {
   Serial.println("Roll:  + = right edge down");
   Serial.println("Pitch: + = screen tilts toward you");
   Serial.println("===================");
-  delay(1000);
 }
 
 void printRawImuSample(const QMI8658_Data &d, float ax, float ay, float az, float gx, float gy) {

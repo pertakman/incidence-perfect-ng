@@ -202,6 +202,12 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
     .calc-grid { display: grid; gap: 10px; grid-template-columns: 1fr; }
     @media (min-width: 700px) { .calc-grid { grid-template-columns: 1fr 1fr; } }
     @media (min-width: 1020px) { .calc-grid.calc-grid-3 { grid-template-columns: 1fr 1fr 1fr; } }
+    @media (min-width: 1020px) {
+      .calc-grid.calc-grid-compact {
+        grid-template-columns: repeat(3, minmax(0, 320px));
+        justify-content: start;
+      }
+    }
     .calc-block { background: var(--card-2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
     .calc-block h3 { margin: 0 0 8px 0; font-size: 13px; color: var(--text); }
     .calc-metric { font-size: 28px; font-weight: 700; margin-top: 6px; }
@@ -340,7 +346,7 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
       <button id="dispAudioArmBtn" type="button">Enable Audio</button>
       <div id="dispAudioStatus" class="muted" style="min-width:220px;">Audio optional. Enable if you want audible guidance.</div>
     </div>
-    <div class="calc-grid calc-grid-3" style="margin-top:10px;">
+    <div class="calc-grid calc-grid-3 calc-grid-compact" style="margin-top:10px;">
       <div class="calc-block">
         <h3 id="dispHeading">Live Surface</h3>
         <div id="dispValue" class="calc-metric">--</div>
@@ -696,6 +702,7 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
     const STATE_POLL_HIDDEN_MS = 1800;
     const NETWORK_POLL_ACTIVE_MS = 3000;
     const NETWORK_POLL_HIDDEN_MS = 6000;
+    const DISPLACEMENT_RENDER_MIN_INTERVAL_MS = 240;
     let linearityCapture = {
       recording: false,
       startedAtMs: 0,
@@ -706,6 +713,10 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
     let livePollTimer = null;
     let statePollTimer = null;
     let networkPollTimer = null;
+    let liveFailureCount = 0;
+    let stateFailureCount = 0;
+    let networkFailureCount = 0;
+    let lastDisplacementRenderMs = 0;
 
     [deviceBatteryModeEl, deviceZeroOnBootEl, deviceDisplayPrecisionEl, deviceTouchEnabledEl, deviceTouchPersistEl, deviceDisplayBrightnessEl].forEach((el) => {
       el.addEventListener('input', () => { deviceFormDirty = true; syncBrightnessLabel(); });
@@ -721,7 +732,7 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
     [dispLabelEl, dispPresetEl, dispAxisEl, dispDepthEl, dispUnitEl, dispTargetModeEl, dispTargetUpEl, dispTargetDownEl, dispToleranceEl, dispApproachWindowEl, dispAudioEnabledEl].forEach((el) => {
       el.addEventListener('input', () => {
         saveDisplacementPrefs();
-        renderDisplacement(lastLiveState);
+        renderDisplacement(lastLiveState, true);
       });
     });
     dispAudioArmBtn.addEventListener('click', armGuideAudio);
@@ -745,7 +756,7 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
     });
     if (surfaceDisplacementCardEl) {
       surfaceDisplacementCardEl.addEventListener('toggle', () => {
-        if (surfaceDisplacementCardEl.open) renderDisplacement(lastLiveState);
+        if (surfaceDisplacementCardEl.open) renderDisplacement(lastLiveState, true);
       });
     }
     if (linearityCardEl) {
@@ -1627,7 +1638,12 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
       }
     }
 
-    function renderDisplacement(s) {
+    function renderDisplacement(s, force = false) {
+      const nowMs = Date.now();
+      if (!force && (nowMs - lastDisplacementRenderMs) < DISPLACEMENT_RENDER_MIN_INTERVAL_MS) {
+        return;
+      }
+      lastDisplacementRenderMs = nowMs;
       const label = displacementLabelText();
       const rawAxis = (dispAxisEl.value === 'pitch' || dispAxisEl.value === 'roll') ? dispAxisEl.value : 'auto';
       const axis = rawAxis === 'auto' ? resolveAutoAxis(s) : rawAxis;
@@ -1896,12 +1912,16 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
       liveRefreshInFlight = true;
       try {
         const s = await fetchJsonWithTimeout('/api/live', LIVE_FETCH_TIMEOUT_MS);
+        liveFailureCount = 0;
         applyLiveState(s);
       } catch (e) {
-        statusEl.textContent = 'Disconnected';
-        batEl.textContent = 'Battery telemetry unavailable';
-        lastLiveState = null;
-        if (surfaceDisplacementCardEl && surfaceDisplacementCardEl.open) renderDisplacement(null);
+        liveFailureCount += 1;
+        if (liveFailureCount >= 3) {
+          statusEl.textContent = 'Disconnected';
+          batEl.textContent = 'Battery telemetry unavailable';
+          lastLiveState = null;
+          if (surfaceDisplacementCardEl && surfaceDisplacementCardEl.open) renderDisplacement(null, true);
+        }
       } finally {
         liveRefreshInFlight = false;
         scheduleLivePoll(nextLivePollDelay());
@@ -1913,6 +1933,7 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
       stateRefreshInFlight = true;
       try {
         const s = await fetchJsonWithTimeout('/api/state', STATE_FETCH_TIMEOUT_MS);
+        stateFailureCount = 0;
         currentDisplayDecimals = sanitizeDisplayPrecision(s.display_precision);
         if (s.fw) {
           fwEl.textContent = s.fw;
@@ -1961,7 +1982,8 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
           msgEl.textContent = '';
         }
       } catch (e) {
-        if (diagnosticsCardEl && diagnosticsCardEl.open) clearDiag(true);
+        stateFailureCount += 1;
+        if (stateFailureCount >= 2 && diagnosticsCardEl && diagnosticsCardEl.open) clearDiag(true);
       } finally {
         stateRefreshInFlight = false;
         scheduleStatePoll(nextStatePollDelay(lastLiveState));
@@ -1973,9 +1995,11 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
       networkRefreshInFlight = true;
       try {
         const s = await fetchJsonWithTimeout('/api/network', NETWORK_FETCH_TIMEOUT_MS);
+        networkFailureCount = 0;
         renderNetwork(s);
       } catch (e) {
-        netStatusEl.textContent = 'Network status unavailable';
+        networkFailureCount += 1;
+        if (networkFailureCount >= 2) netStatusEl.textContent = 'Network status unavailable';
       } finally {
         networkRefreshInFlight = false;
         scheduleNetworkPoll(nextNetworkPollDelay());
