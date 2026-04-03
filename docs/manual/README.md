@@ -4,6 +4,12 @@ Start here:
 
 - `user-manual.md` (end-user guide)
 
+Manual artifact layout:
+
+- `docs/manual/user-manual.md`: editable manual source
+- `docs/manual/dist/`: local generated build output (`.md`, `.html`, `.pdf`, cover assets); ignored in git
+- `docs/manual/releases/`: curated release PDFs intended for sharing and release publishing
+
 ## Build PDF
 
 Generate a stamped PDF (includes FW version + git revision):
@@ -26,6 +32,7 @@ Notes:
 - Print styling is controlled by `docs/manual/manual.css`.
 - Splash cover image is embedded from generated `docs/manual/dist/cover.png`.
 - `docs/manual/dist/` is build output and stays ignored in git.
+- Use this for working drafts and validation copies, not for release distribution.
 
 ## Publish A Tracked Release PDF
 
@@ -38,3 +45,5 @@ powershell -ExecutionPolicy Bypass -File .\scripts\build_manual_pdf.ps1 -Publish
 Output:
 
 - `docs/manual/releases/Incidence-Perfect-NG-Manual-<FW_VERSION>.pdf`
+
+Use this when preparing a release candidate or publishable build so the generated PDF lands in the tracked release-artifact folder.

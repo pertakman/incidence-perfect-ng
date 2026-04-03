@@ -10,7 +10,13 @@ See:
 
 ## Documentation And Assets
 
-Repository-authored documentation files (`.md`, `.txt`) are provided under the same MIT terms unless a specific file says otherwise.
+Repository-authored documentation files (`.md`, `.txt`, release notes, validation logs) are provided under the same MIT terms unless a specific file says otherwise.
+
+Repository-authored generated release artifacts may also be tracked when intentionally published by the project, for example:
+
+- manual PDFs under `docs/manual/releases/`
+
+Generated working files in ignored build-output folders do not change the licensing position by themselves.
 
 ## Third-Party Content
 
@@ -18,6 +24,7 @@ Some materials in this repository are third-party references and are **not** re-
 
 - vendor hardware manuals/schematics in `docs/hardware/`
 - external libraries pulled via PlatformIO (see `platformio.ini`)
+- third-party tools used to build documentation (for example `pandoc` or local browser PDF engines)
 
 Those materials remain under their original licenses/terms from their respective owners.
 

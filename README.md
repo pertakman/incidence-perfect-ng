@@ -306,7 +306,12 @@ Examples:
 - Current dependency pins in `platformio.ini`:
   - `lvgl/lvgl @ ^8.4.0`
   - `moononournation/GFX Library for Arduino @ 1.3.8`
-  - `file://C:/dev/Arduino/Libraries/QMI8658`
+  - `QMI8658` is provided from a local checkout discovered by `scripts/configure_qmi8658_lib.py`
+  - Search order:
+    - `QMI8658_LIB_PATH`
+    - `lib/QMI8658`
+    - `C:/dev/Arduino/Libraries/QMI8658`
+    - `~/Documents/Arduino/libraries/QMI8658`
 
 ## License
 
@@ -336,9 +341,10 @@ Examples:
   - Confirm EEPROM persistence after repeated power cycles for orientation, rotation, alignment, and freeze behavior.
 
 2. UX and control polish
-- Status: Partial
-- Remaining:
-  - Tune ACTION hold thresholds from real usage (`~1.2s / ~2.2s / ~3.2s / ~5.0s`).
+- Status: Closed for now
+- Notes:
+  - Current ACTION hold thresholds feel acceptable from bench use.
+  - Revisit only if beta or customer feedback points to a real usability problem.
 
 3. Connectivity exploration
 - Status: Partial
@@ -382,15 +388,13 @@ Examples:
     - note: higher-complexity feature with workflow and modeling risk
 
 7. Remote-control refactor roadmap
-- Status: Planned
-- Goal:
-  - reduce maintenance risk in `src/remote_control.cpp` before the product scales further
-- Planned steps:
-  - extract the embedded web page/asset blob into a dedicated translation unit
-  - build and verify no behavior change
-  - extract STA/AP network-management helpers into a dedicated module
-  - build and verify again
-  - decide whether OTA handlers should remain in place or move into their own module
+- Status: Done
+- Completed:
+  - extracted the embedded web page/asset blob into dedicated page modules
+  - extracted STA/AP network-management helpers into a dedicated module
+  - extracted OTA flow into a dedicated module
+  - extracted HTTP/API handlers and config helpers out of `src/remote_control.cpp`
+  - reduced `src/remote_control.cpp` to coordinator/setup responsibilities
 
 ## Completed Milestones
 
