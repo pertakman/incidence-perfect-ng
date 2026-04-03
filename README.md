@@ -381,6 +381,17 @@ Examples:
     - decide whether the feature earns a permanent place in the product
     - note: higher-complexity feature with workflow and modeling risk
 
+7. Remote-control refactor roadmap
+- Status: Planned
+- Goal:
+  - reduce maintenance risk in `src/remote_control.cpp` before the product scales further
+- Planned steps:
+  - extract the embedded web page/asset blob into a dedicated translation unit
+  - build and verify no behavior change
+  - extract STA/AP network-management helpers into a dedicated module
+  - build and verify again
+  - decide whether OTA handlers should remain in place or move into their own module
+
 ## Completed Milestones
 
 1. Documentation cleanup
