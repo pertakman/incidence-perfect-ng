@@ -36,12 +36,19 @@ Workflow:
 - Battery telemetry/charging coverage executed (`Yes`/`No`):
 - Deep-sleep wake coverage executed (`Yes`/`No`):
 - Wake splash/touch regression checks executed (`Yes`/`No`):
+- Web stability/long-session coverage executed (`Yes`/`No`):
+- Web setup-helper coverage executed (`Yes`/`No`):
+  - Surface Displacement:
+  - Linearity:
+- Device settings round-trip coverage executed (`Yes`/`No`):
+- Manual/docs updated as part of this session (`Yes`/`No`):
 
 ## Results Summary
 
 - Passed:
 - Failed:
 - Blocked:
+- Deferred:
 
 ## Failures / Anomalies
 
@@ -64,6 +71,11 @@ For each issue, add one entry:
 
 - Baseline status:
 - Next action:
+- RC recommendation:
+  - Not ready
+  - Ready for internal use
+  - Ready for external beta
+  - Ready for release candidate publication
 
 ## Attachments
 
@@ -71,3 +83,4 @@ For each issue, add one entry:
 - Media links:
 - Related commit(s):
 - OTA artifact used (`.bin` name/version):
+- Manual PDF generated:

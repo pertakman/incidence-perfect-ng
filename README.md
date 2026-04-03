@@ -323,6 +323,7 @@ Examples:
 - `docs/architecture/`: design notes and diagrams
 - `docs/testing/`: hardware validation workflow and test logs
 - `docs/testing/session-logs/`: dated validation session protocols
+- `docs/release/release-candidate-workflow.md`: step-by-step RC preparation flow
 - `docs/manual/releases/`: versioned manual artifacts intended for sharing
 - `docs/manual/dist/`: local generated/manual build outputs (historical snapshots; may include legacy wording)
 

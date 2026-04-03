@@ -79,6 +79,15 @@ Use this checklist against the current firmware build to establish a known-good 
 | T58 | Rotate UI 180 deg, then cold-boot the board | Splash screen and firmware version overlay appear in the stored orientation |  |  |
 | T59 | With `Startup ZERO = Enabled`, cold-boot on a stable surface | Device enters startup ZERO automatically and settles near `+0.00 deg` without manual confirm |  |  |
 | T60 | Set `Startup ZERO = Disabled`, cold-boot the board | No startup ZERO workflow runs; saved zero reference remains in effect |  |  |
+| T61 | In web `Device Settings`, change `Readout decimals` and save | Touch UI and web UI both reflect the saved precision |  |  |
+| T62 | In web `Device Settings`, change `Brightness` and save | Physical display brightness changes and persists after refresh/reboot as expected |  |  |
+| T63 | In web `Device Settings`, set `Touch input = Disabled` with persistence OFF, then reboot | Touch is ignored until reboot, then returns automatically after reboot |  |  |
+| T64 | In web `Device Settings`, set `Touch input = Disabled` with persistence ON, then reboot | Touch remains disabled after reboot until re-enabled from a non-touch path |  |  |
+| T65 | Use web `Surface Displacement` with valid depth/source | Live displacement updates smoothly and target guidance behaves sensibly |  |  |
+| T66 | Enable/disable web displacement audio cues during active use | Web UI remains responsive; no lockup when arming or disarming browser audio |  |  |
+| T67 | Leave web UI open during a realistic bench session (at least several minutes) | Live readout remains responsive; no apparent lockup or stale polling lane |  |  |
+| T68 | Open/close `Diagnostics`, `Surface Displacement`, and `Linearity` panels during use | Page remains responsive and panel content refreshes correctly when reopened |  |  |
+| T69 | In web `Linearity`, record a representative continuous sweep | Recording completes, chart renders, and UI remains responsive afterward |  |  |
 
 ## Optional Deep Check (Serial Alignment Flow)
 
@@ -94,5 +103,5 @@ Expected:
 
 ## Exit Criteria for Baseline Complete
 
-- T01-T57 pass.
+- T01-T69 pass for the scope being shipped, or any intentionally skipped tests are documented in the session log.
 - Any failures are captured with reproducible steps and serial output snippets.
