@@ -121,7 +121,7 @@ Touch UI, serial, ACTION button, and web share the same ZERO/OFFSET CAL/ALIGN st
 - UI behavior:
   - `ZERO` is guided (`CONFIRM`/`CANCEL`, stillness timer + averaging progress bar).
   - Startup splash follows the stored `ROTATE` orientation.
-  - Startup ZERO is enabled by default on cold boot and can be disabled from the web `Network` panel.
+  - Startup ZERO is enabled by default on cold boot and can be disabled from the web `Device Settings` panel.
   - `ZERO` long press starts OFFSET CAL workflow.
   - Button touch targets are extended to improve tap reliability.
   - `MODE` is immediate (loads mode-specific calibration/zero settings from EEPROM).
@@ -173,17 +173,22 @@ Available in Phase A:
   - optional browser-side audio cues while approaching target
 - Network panel:
   - switch between `AP only` and `STA with AP fallback`
-  - toggle startup ZERO on/off
-  - select persistent readout decimals (`1`, `2`, `3`) shared by touch UI and web UI
-  - select persistent display brightness (`25%`, `50%`, `75%`, `100%`) for the device screen
   - set STA SSID/password
   - set custom hostname (`<your-hostname>.local`) for multi-unit deployments
 - Device settings panel:
   - battery presence mode, startup ZERO, readout decimals, touch lock, and brightness are separated from network settings
+  - startup ZERO can be enabled/disabled for cold boot behavior
+  - select persistent readout decimals (`1`, `2`, `3`) shared by touch UI and web UI
+  - set persistent display brightness with a slider (`10%` to `100%` in `5%` steps) for the device screen
   - touch input can be disabled temporarily for masking-tape workflows
   - optional checkbox allows the touch lock to persist across reboot
-- Web UI panel:
+- Web UI Appearance panel:
   - browser-local day/dark theme switching
+- Linearity panel:
+  - record a continuous radio-driven servo sweep from the browser
+  - analyze measured `ROLL`, `PITCH`, or derived displacement against time-normalized travel
+  - plot averaged `UP` / `DOWN` curves against an ideal straight-line response
+  - report peak deviation and hysteresis as an exploratory setup aid
 - OTA panel:
   - upload firmware `.bin` from browser and apply update
 - Workflow sync is shared across touch, serial, ACTION button, and web.
@@ -370,9 +375,9 @@ Examples:
     - evaluate whether preset defaults are good enough from real bench use
     - decide whether `AUTO` source behavior should remain the default for rudder workflows
   - Explore control-surface linearity capture:
-    - guide operator through servo sweep setup
-    - record measured angles through the sweep
-    - compare to assumed linear travel between endpoints
+    - validate whether the first browser-side prototype produces actionable setup insight
+    - tune sweep detection, charting, and summary wording from bench use
+    - decide whether the feature earns a permanent place in the product
     - note: higher-complexity feature with workflow and modeling risk
 
 ## Completed Milestones

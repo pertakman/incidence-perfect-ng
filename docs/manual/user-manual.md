@@ -244,11 +244,79 @@ What you get in web UI:
   - corrected vectors
   - physics angles + conditioning
   - calibration references (bias/zero/align)
+- Device settings for:
+  - battery indicator behavior
+  - `Startup ZERO` on cold boot
+  - readout decimals (`1`, `2`, `3`) shared by touch UI and web UI
+  - touch input enable/disable
+  - optional persistent touch lock across reboot
+  - display brightness with a slider (`10%` to `100%`)
 - Network settings for:
   - Wi-Fi mode (`AP only` / `STA with AP fallback`)
   - hostname
-  - battery indicator behavior
-  - `Startup ZERO` on cold boot
+  - STA SSID / password
+- Web UI Appearance settings for:
+  - browser-local `Dark` / `Day` theme selection
+
+### Surface Displacement Assistant
+
+The web UI includes a setup helper for translating live angle into trailing-edge travel.
+
+Use it to:
+
+- pick a source:
+  - `ROLL`
+  - `PITCH`
+  - `AUTO` (follows the active single-axis view, with preset fallback)
+- enter surface depth and units
+- choose a preset:
+  - `Aileron`
+  - `Elevator`
+  - `Rudder`
+- see live calculated displacement using:
+  - `displacement = depth * sin(angle)`
+
+You can also use it as a target-guided setup assistant:
+
+- target by:
+  - angle
+  - displacement
+- set separate `UP` and `DOWN` targets
+- set tolerance
+- optionally set a custom audio approach window
+- enable browser-side audio cues while approaching target
+
+Notes:
+
+- `Aileron` and `Elevator` presets currently default to `PITCH`.
+- `Rudder` stays more conservative and can use `AUTO` so you can confirm fixture behavior.
+- Audio cues come from the browser device, not the instrument itself.
+- On phones/tablets, audio usually requires a tap on `Enable Audio`/arming control first.
+
+### Linearity (Experimental)
+
+The web UI also includes an exploratory `Linearity` panel.
+
+Intended workflow:
+
+1. Set your radio/servo to sweep continuously from endpoint to endpoint.
+2. Open `Linearity`.
+3. Choose source:
+   - `ROLL`
+   - `PITCH`
+   - `Displacement`
+4. Press `Record`.
+5. Let the sweep run for several cycles.
+6. Review the plotted result.
+
+What it shows:
+
+- averaged `UP` and `DOWN` curves
+- ideal straight-line reference
+- peak deviation from linear response
+- hysteresis gap between `UP` and `DOWN`
+
+This feature is currently best treated as a bench-analysis aid/prototype rather than a finalized production workflow.
 
 ### OTA Update from Web UI
 
@@ -297,13 +365,18 @@ Important:
 
 Battery note:
 
-- In web `Network` settings, `Battery` can be set to:
+- In web `Device Settings`, `Battery` can be set to:
   - `Auto detect` (heuristic/default)
   - `Installed` (force battery-present UI semantics)
   - `No battery installed` (hide battery indicators in both web and touch UI)
-- In the same `Network` settings, `Startup ZERO` can be set to:
+- In the same `Device Settings`, `Startup ZERO` can be set to:
   - `Enabled` (default; guided ZERO starts automatically on cold boot)
   - `Disabled` (keep the saved zero reference until you explicitly run ZERO)
+- In `Device Settings`, `Readout decimals` can be set to `1`, `2`, or `3`.
+- In `Device Settings`, `Touch input` can be disabled if you want to tape the device to a surface without accidental taps.
+  - If `Persist touch lock across reboot` is left off, reboot restores touch automatically.
+  - If persistence is enabled, touch stays disabled until re-enabled from a non-touch path such as the web UI or ACTION button workflow.
+- In `Device Settings`, `Brightness` controls the physical display brightness from `10%` to `100%`.
 - Current charging state is inferred from battery-voltage trend in firmware.
 - The web/API exposes this via `battery_charging_inferred`.
 - Battery-pack presence is best-effort on this hardware; when firmware suspects "USB powered, no pack", web/API reports `battery_present=false` with `battery_present_inferred=true`.
