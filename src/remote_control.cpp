@@ -269,7 +269,7 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
     <div id="msg"></div>
   </div>
 
-  <details class="card">
+  <details id="surfaceDisplacementCard" class="card">
     <summary>Surface Displacement</summary>
     <p class="diag-note">Estimate trailing-edge displacement from live angle using `displacement = depth * sin(angle)` and optionally guide setup toward separate up/down targets.</p>
     <div class="preset-row" style="margin-top:8px;">
@@ -359,7 +359,7 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
     </div>
   </details>
 
-  <details class="card">
+  <details id="linearityCard" class="card">
     <summary>Linearity</summary>
     <p class="diag-note">Start a continuous endpoint-to-endpoint sweep on the radio first, then record here. The web UI treats time within each sweep as servo travel.</p>
     <div class="row" style="margin-top:8px;">
@@ -402,7 +402,7 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
     </div>
   </details>
 
-  <details class="card">
+  <details id="diagnosticsCard" class="card">
     <summary>Device Settings</summary>
     <div id="deviceStatus" class="muted">Loading device settings...</div>
     <div class="row" style="margin-top:8px;">
@@ -611,6 +611,8 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
     const dispTargetHeadingEl = document.getElementById('dispTargetHeading');
     const dispTargetValueEl = document.getElementById('dispTargetValue');
     const dispTargetCaptionEl = document.getElementById('dispTargetCaption');
+    const surfaceDisplacementCardEl = document.getElementById('surfaceDisplacementCard');
+    const linearityCardEl = document.getElementById('linearityCard');
     const linearitySourceEl = document.getElementById('linearitySource');
     const linearityDurationEl = document.getElementById('linearityDuration');
     const linearityRecordBtn = document.getElementById('linearityRecordBtn');
@@ -650,6 +652,7 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
     const otaBtnEl = document.getElementById('otaBtn');
     const otaProgressBarEl = document.getElementById('otaProgressBar');
     const otaMsgEl = document.getElementById('otaMsg');
+    const diagnosticsCardEl = document.getElementById('diagnosticsCard');
     const diagValidEl = document.getElementById('diagValid');
     const diagWorkflowsEl = document.getElementById('diagWorkflows');
     const diagRawAEl = document.getElementById('diagRawA');
@@ -683,6 +686,16 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
     let guideAudioUnlocked = false;
     let guideAudioPulseUntilMs = 0;
     let guideAudioLastPulseMs = 0;
+    const LIVE_FETCH_TIMEOUT_MS = 1200;
+    const STATE_FETCH_TIMEOUT_MS = 1800;
+    const NETWORK_FETCH_TIMEOUT_MS = 2500;
+    const LIVE_POLL_ACTIVE_MS = 120;
+    const LIVE_POLL_HIDDEN_MS = 700;
+    const STATE_POLL_ACTIVE_MS = 600;
+    const STATE_POLL_IDLE_MS = 1200;
+    const STATE_POLL_HIDDEN_MS = 1800;
+    const NETWORK_POLL_ACTIVE_MS = 3000;
+    const NETWORK_POLL_HIDDEN_MS = 6000;
     let linearityCapture = {
       recording: false,
       startedAtMs: 0,
@@ -690,6 +703,9 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
       samples: [],
       result: null
     };
+    let livePollTimer = null;
+    let statePollTimer = null;
+    let networkPollTimer = null;
 
     [deviceBatteryModeEl, deviceZeroOnBootEl, deviceDisplayPrecisionEl, deviceTouchEnabledEl, deviceTouchPersistEl, deviceDisplayBrightnessEl].forEach((el) => {
       el.addEventListener('input', () => { deviceFormDirty = true; syncBrightnessLabel(); });
@@ -719,7 +735,29 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
     linearityRecordBtn.addEventListener('click', startLinearityCapture);
     linearityStopBtn.addEventListener('click', () => stopLinearityCapture(false));
     linearityClearBtn.addEventListener('click', clearLinearityCapture);
-    window.addEventListener('resize', () => drawLinearityChart(linearityCapture.result));
+    window.addEventListener('resize', () => {
+      if (linearityCardEl && linearityCardEl.open) drawLinearityChart(linearityCapture.result);
+    });
+    document.addEventListener('visibilitychange', () => {
+      scheduleLivePoll(0);
+      scheduleStatePoll(0);
+      scheduleNetworkPoll(0);
+    });
+    if (surfaceDisplacementCardEl) {
+      surfaceDisplacementCardEl.addEventListener('toggle', () => {
+        if (surfaceDisplacementCardEl.open) renderDisplacement(lastLiveState);
+      });
+    }
+    if (linearityCardEl) {
+      linearityCardEl.addEventListener('toggle', () => {
+        if (linearityCardEl.open) drawLinearityChart(linearityCapture.result);
+      });
+    }
+    if (diagnosticsCardEl) {
+      diagnosticsCardEl.addEventListener('toggle', () => {
+        if (diagnosticsCardEl.open) scheduleStatePoll(0);
+      });
+    }
 
     function fmt(v) {
       const n = Number(v);
@@ -727,12 +765,69 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
       return (n >= 0 ? '+' : '') + n.toFixed(currentDisplayDecimals) + '\u00B0';
     }
 
+    async function fetchJsonWithTimeout(url, timeoutMs) {
+      let timeoutHandle = null;
+      let controller = null;
+      try {
+        if (typeof AbortController !== 'undefined') {
+          controller = new AbortController();
+          timeoutHandle = setTimeout(() => controller.abort(), timeoutMs);
+          const response = await fetch(url, {
+            cache: 'no-store',
+            signal: controller.signal
+          });
+          return await response.json();
+        }
+
+        const timeoutPromise = new Promise((_, reject) => {
+          timeoutHandle = setTimeout(() => reject(new Error('request timeout')), timeoutMs);
+        });
+        const response = await Promise.race([
+          fetch(url, { cache: 'no-store' }),
+          timeoutPromise
+        ]);
+        return await response.json();
+      } finally {
+        if (timeoutHandle) clearTimeout(timeoutHandle);
+      }
+    }
+
+    function scheduleLivePoll(delayMs = LIVE_POLL_ACTIVE_MS) {
+      if (livePollTimer) clearTimeout(livePollTimer);
+      livePollTimer = setTimeout(refreshLive, Math.max(0, delayMs));
+    }
+
+    function scheduleStatePoll(delayMs = STATE_POLL_ACTIVE_MS) {
+      if (statePollTimer) clearTimeout(statePollTimer);
+      statePollTimer = setTimeout(refreshState, Math.max(0, delayMs));
+    }
+
+    function scheduleNetworkPoll(delayMs = NETWORK_POLL_ACTIVE_MS) {
+      if (networkPollTimer) clearTimeout(networkPollTimer);
+      networkPollTimer = setTimeout(refreshNetwork, Math.max(0, delayMs));
+    }
+
+    function nextLivePollDelay() {
+      return document.hidden ? LIVE_POLL_HIDDEN_MS : LIVE_POLL_ACTIVE_MS;
+    }
+
+    function nextStatePollDelay(s) {
+      if (document.hidden) return STATE_POLL_HIDDEN_MS;
+      const workflowActive = !!(s && (s.mode_active || s.align_active || s.offset_cal_active || s.zero_active));
+      const diagnosticsOpen = diagnosticsCardEl && diagnosticsCardEl.open;
+      return (workflowActive || diagnosticsOpen) ? STATE_POLL_ACTIVE_MS : STATE_POLL_IDLE_MS;
+    }
+
+    function nextNetworkPollDelay() {
+      return document.hidden ? NETWORK_POLL_HIDDEN_MS : NETWORK_POLL_ACTIVE_MS;
+    }
+
     function applyWebTheme(theme) {
       const next = theme === 'day' ? 'day' : 'dark';
       document.body.setAttribute('data-theme', next);
       webThemeEl.value = next;
       webThemeMsgEl.textContent = `${next === 'day' ? 'Day' : 'Dark'} theme active in this browser.`;
-      drawLinearityChart(linearityCapture.result);
+      if (linearityCardEl && linearityCardEl.open) drawLinearityChart(linearityCapture.result);
     }
 
     function saveWebTheme() {
@@ -1047,6 +1142,7 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
     }
 
     function drawLinearityChart(result) {
+      if (linearityCardEl && !linearityCardEl.open && !result) return;
       const canvas = linearityCanvasEl;
       const ctx = canvas.getContext('2d');
       const ratio = Math.max(1, window.devicePixelRatio || 1);
@@ -1425,8 +1521,11 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
     }
 
     function stopGuideAudio() {
-      if (guideAudioGain && guideAudioCtx) {
-        guideAudioGain.gain.setTargetAtTime(0.0001, guideAudioCtx.currentTime, 0.02);
+      try {
+        if (guideAudioGain && guideAudioCtx && guideAudioCtx.state !== 'closed') {
+          guideAudioGain.gain.setTargetAtTime(0.0001, guideAudioCtx.currentTime, 0.02);
+        }
+      } catch (e) {
       }
     }
 
@@ -1466,51 +1565,66 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
       }
     }
 
-    function updateGuideAudio(guide) {
-      if (!dispAudioEnabledEl.checked) {
-        stopGuideAudio();
-        setGuideAudioMessage('Audio cues are off.');
-        return;
-      }
-      if (!guideAudioUnlocked) {
-        stopGuideAudio();
-        setGuideAudioMessage('Tap Enable Audio to allow browser beeps.');
-        return;
-      }
-      if (!guide || !guide.hasGuide) {
-        stopGuideAudio();
-        setGuideAudioMessage('Enter targets to use audio cues.');
-        return;
-      }
-      if (!guideAudioCtx || !guideAudioOsc || !guideAudioGain) {
-        setGuideAudioMessage('Audio preparing...');
-        return;
-      }
-
-      const now = Date.now();
-      if (guide.withinTolerance) {
-        guideAudioOsc.frequency.setTargetAtTime(880, guideAudioCtx.currentTime, 0.01);
-        guideAudioGain.gain.setTargetAtTime(0.035, guideAudioCtx.currentTime, 0.02);
-        setGuideAudioMessage('Solid tone: within tolerance.');
-        return;
-      }
-
-      if (guide.deltaAbs <= guide.approachWindow) {
-        const ratio = Math.max(0, Math.min(1, (guide.approachWindow - guide.deltaAbs) / Math.max(guide.approachWindow, 0.001)));
-        const intervalMs = 850 - (ratio * 620);
-        guideAudioOsc.frequency.setTargetAtTime(580 + (ratio * 140), guideAudioCtx.currentTime, 0.01);
-        if ((now - guideAudioLastPulseMs) >= intervalMs) {
-          guideAudioLastPulseMs = now;
-          guideAudioPulseUntilMs = now + 120;
-        }
-        const pulseActive = now < guideAudioPulseUntilMs;
-        guideAudioGain.gain.setTargetAtTime(pulseActive ? 0.035 : 0.0001, guideAudioCtx.currentTime, 0.02);
-        setGuideAudioMessage('Beeping faster as you approach target.');
-        return;
-      }
-
+    function disableGuideAudioWithMessage(text) {
       stopGuideAudio();
-      setGuideAudioMessage('Outside approach window.');
+      guideAudioUnlocked = false;
+      dispAudioEnabledEl.checked = false;
+      dispAudioArmBtn.textContent = 'Enable Audio';
+      setGuideAudioMessage(text);
+      saveDisplacementPrefs();
+    }
+
+    function updateGuideAudio(guide) {
+      try {
+        if (!dispAudioEnabledEl.checked) {
+          stopGuideAudio();
+          dispAudioArmBtn.textContent = guideAudioUnlocked ? 'Audio Ready' : 'Enable Audio';
+          setGuideAudioMessage('Audio cues are off.');
+          return;
+        }
+        if (!guideAudioUnlocked) {
+          stopGuideAudio();
+          dispAudioArmBtn.textContent = 'Enable Audio';
+          setGuideAudioMessage('Tap Enable Audio to allow browser beeps.');
+          return;
+        }
+        if (!guide || !guide.hasGuide) {
+          stopGuideAudio();
+          setGuideAudioMessage('Enter targets to use audio cues.');
+          return;
+        }
+        if (!guideAudioCtx || !guideAudioOsc || !guideAudioGain || guideAudioCtx.state === 'closed') {
+          disableGuideAudioWithMessage('Audio became unavailable. Re-enable it if you want browser beeps.');
+          return;
+        }
+
+        const now = Date.now();
+        if (guide.withinTolerance) {
+          guideAudioOsc.frequency.setTargetAtTime(880, guideAudioCtx.currentTime, 0.01);
+          guideAudioGain.gain.setTargetAtTime(0.035, guideAudioCtx.currentTime, 0.02);
+          setGuideAudioMessage('Solid tone: within tolerance.');
+          return;
+        }
+
+        if (guide.deltaAbs <= guide.approachWindow) {
+          const ratio = Math.max(0, Math.min(1, (guide.approachWindow - guide.deltaAbs) / Math.max(guide.approachWindow, 0.001)));
+          const intervalMs = 850 - (ratio * 620);
+          guideAudioOsc.frequency.setTargetAtTime(580 + (ratio * 140), guideAudioCtx.currentTime, 0.01);
+          if ((now - guideAudioLastPulseMs) >= intervalMs) {
+            guideAudioLastPulseMs = now;
+            guideAudioPulseUntilMs = now + 120;
+          }
+          const pulseActive = now < guideAudioPulseUntilMs;
+          guideAudioGain.gain.setTargetAtTime(pulseActive ? 0.035 : 0.0001, guideAudioCtx.currentTime, 0.02);
+          setGuideAudioMessage('Beeping faster as you approach target.');
+          return;
+        }
+
+        stopGuideAudio();
+        setGuideAudioMessage('Outside approach window.');
+      } catch (e) {
+        disableGuideAudioWithMessage('Audio cue control failed. Audio was turned off to keep the UI responsive.');
+      }
     }
 
     function renderDisplacement(s) {
@@ -1773,7 +1887,7 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
       } else {
         batEl.textContent = 'Battery telemetry unavailable';
       }
-      renderDisplacement(s);
+      if (surfaceDisplacementCardEl && surfaceDisplacementCardEl.open) renderDisplacement(s);
       sampleLinearity(s);
     }
 
@@ -1781,16 +1895,16 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
       if (otaUploadInFlight || liveRefreshInFlight) return;
       liveRefreshInFlight = true;
       try {
-        const r = await fetch('/api/live', { cache: 'no-store' });
-        const s = await r.json();
+        const s = await fetchJsonWithTimeout('/api/live', LIVE_FETCH_TIMEOUT_MS);
         applyLiveState(s);
       } catch (e) {
         statusEl.textContent = 'Disconnected';
         batEl.textContent = 'Battery telemetry unavailable';
         lastLiveState = null;
-        renderDisplacement(null);
+        if (surfaceDisplacementCardEl && surfaceDisplacementCardEl.open) renderDisplacement(null);
       } finally {
         liveRefreshInFlight = false;
+        scheduleLivePoll(nextLivePollDelay());
       }
     }
 
@@ -1798,10 +1912,15 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
       if (otaUploadInFlight || stateRefreshInFlight) return;
       stateRefreshInFlight = true;
       try {
-        const r = await fetch('/api/state', { cache: 'no-store' });
-        const s = await r.json();
-        applyLiveState(s);
-        renderDiag(s);
+        const s = await fetchJsonWithTimeout('/api/state', STATE_FETCH_TIMEOUT_MS);
+        currentDisplayDecimals = sanitizeDisplayPrecision(s.display_precision);
+        if (s.fw) {
+          fwEl.textContent = s.fw;
+          if (!otaVersionEl.value.trim()) {
+            otaVersionEl.value = String(s.fw);
+          }
+        }
+        if (diagnosticsCardEl && diagnosticsCardEl.open) renderDiag(s);
         normalControls.classList.toggle('hidden', s.mode_active || s.align_active || s.offset_cal_active || s.zero_active);
         modeControls.classList.toggle('hidden', !s.mode_active || s.align_active || s.offset_cal_active || s.zero_active);
         alignControls.classList.toggle('hidden', !s.align_active || s.offset_cal_active || s.zero_active);
@@ -1842,9 +1961,10 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
           msgEl.textContent = '';
         }
       } catch (e) {
-        clearDiag(true);
+        if (diagnosticsCardEl && diagnosticsCardEl.open) clearDiag(true);
       } finally {
         stateRefreshInFlight = false;
+        scheduleStatePoll(nextStatePollDelay(lastLiveState));
       }
     }
 
@@ -1852,13 +1972,13 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
       if (otaUploadInFlight || networkRefreshInFlight) return;
       networkRefreshInFlight = true;
       try {
-        const r = await fetch('/api/network', { cache: 'no-store' });
-        const s = await r.json();
+        const s = await fetchJsonWithTimeout('/api/network', NETWORK_FETCH_TIMEOUT_MS);
         renderNetwork(s);
       } catch (e) {
         netStatusEl.textContent = 'Network status unavailable';
       } finally {
         networkRefreshInFlight = false;
+        scheduleNetworkPoll(nextNetworkPollDelay());
       }
     }
 
@@ -1900,9 +2020,9 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
       } finally {
         netSaveBtn.disabled = false;
       }
-      setTimeout(refreshNetwork, 120);
-      setTimeout(refreshState, 120);
-      setTimeout(refreshLive, 120);
+      scheduleNetworkPoll(120);
+      scheduleStatePoll(120);
+      scheduleLivePoll(120);
     }
 
     async function saveDeviceSettings() {
@@ -1943,9 +2063,9 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
       } finally {
         deviceSaveBtn.disabled = false;
       }
-      setTimeout(refreshNetwork, 120);
-      setTimeout(refreshState, 120);
-      setTimeout(refreshLive, 120);
+      scheduleNetworkPoll(120);
+      scheduleStatePoll(120);
+      scheduleLivePoll(120);
     }
 
     async function recoverNetwork() {
@@ -1973,9 +2093,9 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
       } finally {
         netRecoverBtn.disabled = false;
       }
-      setTimeout(refreshNetwork, 120);
-      setTimeout(refreshState, 120);
-      setTimeout(refreshLive, 120);
+      scheduleNetworkPoll(120);
+      scheduleStatePoll(120);
+      scheduleLivePoll(120);
     }
 
     function inferVersionFromFilename(name) {
@@ -2104,22 +2224,19 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
       } catch (e) {
         msgEl.textContent = 'Command failed';
       }
-      setTimeout(refreshLive, 80);
-      setTimeout(refreshState, 80);
+      scheduleLivePoll(80);
+      scheduleStatePoll(80);
     }
 
     loadWebTheme();
     loadDisplacementPrefs();
     loadLinearityPrefs();
     syncBrightnessLabel();
-    renderDisplacement(null);
-    drawLinearityChart(null);
+    if (surfaceDisplacementCardEl && surfaceDisplacementCardEl.open) renderDisplacement(null);
+    if (linearityCardEl && linearityCardEl.open) drawLinearityChart(null);
     refreshLive();
     refreshState();
     refreshNetwork();
-    setInterval(refreshLive, 120);
-    setInterval(refreshState, 600);
-    setInterval(refreshNetwork, 3000);
   </script>
 </body>
 </html>
