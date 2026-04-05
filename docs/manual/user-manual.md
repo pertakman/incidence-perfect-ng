@@ -226,6 +226,18 @@ Use your phone browser as a remote panel:
    - Password: `incidence-ng`
 2. Open `http://192.168.4.1`.
 
+If you later switch the device to `STA with AP fallback`, you can reach it by either:
+
+- its STA IP address
+- `http://<hostname>.local`
+
+Important note about hostnames:
+
+- the `.local` suffix is required because hostname access uses mDNS on the local network
+- `hostname` by itself is usually not enough
+- on some Windows/network setups, `.local` lookup can be inconsistent
+- if `hostname.local` does not resolve, use the STA IP address instead
+
 What you get in web UI:
 
 - Live `ROLL`/`PITCH` readout with the same status line as the device.
@@ -255,6 +267,8 @@ What you get in web UI:
   - Wi-Fi mode (`AP only` / `STA with AP fallback`)
   - hostname
   - STA SSID / password
+
+For practical use, treat hostname access as a convenience and the STA IP as the reliable fallback.
 - Web UI Appearance settings for:
   - browser-local `Dark` / `Day` theme selection
 
@@ -272,6 +286,7 @@ Use it to:
 - choose a preset:
   - `Aileron`
   - `Elevator`
+  - `Flap`
   - `Rudder`
 - see live calculated displacement using:
   - `displacement = depth * sin(angle)`
@@ -288,8 +303,9 @@ You can also use it as a target-guided setup assistant:
 
 Notes:
 
-- `Aileron` and `Elevator` presets currently default to `PITCH`.
-- `Rudder` stays more conservative and can use `AUTO` so you can confirm fixture behavior.
+- all control-surface presets currently default to `PITCH`
+- you can still switch source manually to `ROLL` or `AUTO` if your fixture/setup works better that way
+- depth and `UP` / `DOWN` target values are remembered per preset in the browser so you can return to a surface type later
 - Audio cues come from the browser device, not the instrument itself.
 - On phones/tablets, audio usually requires a tap on `Enable Audio`/arming control first.
 

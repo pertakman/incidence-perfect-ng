@@ -203,9 +203,9 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
       <label style="min-width:180px;">
         <div class="muted" style="margin:0 0 4px 0;">Preset</div>
         <select id="dispPreset">
-          <option value="custom">Custom</option>
           <option value="aileron">Aileron</option>
           <option value="elevator">Elevator</option>
+          <option value="flap">Flap</option>
           <option value="rudder">Rudder</option>
         </select>
       </label>
@@ -596,7 +596,9 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
     const diagAlignEl = document.getElementById('diagAlign');
     const WARN_LIMIT = 30.0;
     const CRIT_LIMIT = 45.0;
-    const DISPLACEMENT_PREFS_KEY = 'ipng_displacement_v2';
+    const DISPLACEMENT_PREFS_KEY = 'ipng_displacement_v3';
+    const LEGACY_DISPLACEMENT_PREFS_KEY = 'ipng_displacement_v2';
+    const DISPLACEMENT_PRESET_NAMES = ['aileron', 'elevator', 'flap', 'rudder'];
     const WEB_THEME_PREFS_KEY = 'ipng_web_theme_v1';
     const LINEARITY_PREFS_KEY = 'ipng_linearity_v1';
     let networkFormDirty = false;
@@ -638,6 +640,10 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
     let stateFailureCount = 0;
     let networkFailureCount = 0;
     let lastDisplacementRenderMs = 0;
+    let displacementPrefsState = {
+      selectedPreset: 'aileron',
+      presets: {}
+    };
 
     [deviceBatteryModeEl, deviceZeroOnBootEl, deviceDisplayPrecisionEl, deviceTouchEnabledEl, deviceTouchPersistEl, deviceDisplayBrightnessEl].forEach((el) => {
       el.addEventListener('input', () => { deviceFormDirty = true; syncBrightnessLabel(); });
@@ -650,7 +656,13 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
       applyWebTheme(webThemeEl.value);
       saveWebTheme();
     });
-    [dispLabelEl, dispPresetEl, dispAxisEl, dispDepthEl, dispUnitEl, dispTargetModeEl, dispTargetUpEl, dispTargetDownEl, dispToleranceEl, dispApproachWindowEl, dispAudioEnabledEl].forEach((el) => {
+    dispPresetEl.addEventListener('input', () => {
+      displacementPrefsState.selectedPreset = normalizePresetName(dispPresetEl.value);
+      dispPresetEl.value = displacementPrefsState.selectedPreset;
+      saveDisplacementPrefsState();
+      dispPresetHintEl.textContent = presetDefinition(displacementPrefsState.selectedPreset).hint;
+    });
+    [dispLabelEl, dispAxisEl, dispDepthEl, dispUnitEl, dispTargetModeEl, dispTargetUpEl, dispTargetDownEl, dispToleranceEl, dispApproachWindowEl, dispAudioEnabledEl].forEach((el) => {
       el.addEventListener('input', () => {
         saveDisplacementPrefs();
         renderDisplacement(lastLiveState, true);
@@ -855,6 +867,16 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
       return Math.max(4, Math.min(20, value));
     }
 
+    function normalizePresetName(raw) {
+      return DISPLACEMENT_PRESET_NAMES.includes(raw) ? raw : 'aileron';
+    }
+
+    function sanitizeDisplacementAxis(raw) {
+      if (raw === 'roll') return 'roll';
+      if (raw === 'auto') return 'auto';
+      return 'pitch';
+    }
+
     function displacementLabelText() {
       const label = String(dispLabelEl.value || '').trim();
       return label ? label : 'Surface';
@@ -880,7 +902,7 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
             axis: 'pitch',
             targetMode: 'displacement',
             unit: 'mm',
-            hint: 'Aileron preset suggests PITCH and displacement targets for differential setup.'
+            hint: 'Aileron defaults to PITCH. Depth and target values are remembered per preset.'
           };
         case 'elevator':
           return {
@@ -888,25 +910,109 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
             axis: 'pitch',
             targetMode: 'displacement',
             unit: 'mm',
-            hint: 'Elevator preset suggests PITCH and displacement targets.'
+            hint: 'Elevator defaults to PITCH. Depth and target values are remembered per preset.'
+          };
+        case 'flap':
+          return {
+            label: 'Flap',
+            axis: 'pitch',
+            targetMode: 'displacement',
+            unit: 'mm',
+            hint: 'Flap defaults to PITCH. Depth and target values are remembered per preset.'
           };
         case 'rudder':
           return {
             label: 'Rudder',
-            axis: 'auto',
+            axis: 'pitch',
             targetMode: 'displacement',
             unit: 'mm',
-            hint: 'Rudder preset keeps AUTO source so you can verify which measured axis matches your fixture.'
+            hint: 'Rudder also defaults to PITCH here. Change the axis if your fixture reads better another way.'
           };
         default:
-          return {
-            label: '',
-            axis: 'auto',
-            targetMode: 'displacement',
-            unit: 'mm',
-            hint: 'Custom leaves you in full manual control.'
-          };
+          return presetDefinition('aileron');
       }
+    }
+
+    function defaultPresetPrefs(name) {
+      const preset = presetDefinition(name);
+      return {
+        label: preset.label,
+        axis: preset.axis,
+        depth: '',
+        unit: preset.unit,
+        targetMode: preset.targetMode,
+        targetUp: '',
+        targetDown: '',
+        tolerance: '0.5',
+        approachWindow: '',
+        audioEnabled: false
+      };
+    }
+
+    function normalizePresetPrefs(name, raw) {
+      const defaults = defaultPresetPrefs(name);
+      if (!raw || typeof raw !== 'object') return defaults;
+      const out = { ...defaults };
+      if (typeof raw.label === 'string' && raw.label.trim()) out.label = raw.label.trim();
+      out.axis = sanitizeDisplacementAxis(raw.axis);
+      if (raw.depth !== undefined && raw.depth !== null) out.depth = String(raw.depth).trim();
+      if (typeof raw.unit === 'string' && raw.unit.trim()) out.unit = sanitizeUnitText(raw.unit);
+      out.targetMode = raw.targetMode === 'angle' ? 'angle' : 'displacement';
+      if (raw.targetUp !== undefined && raw.targetUp !== null) out.targetUp = String(raw.targetUp).trim();
+      if (raw.targetDown !== undefined && raw.targetDown !== null) out.targetDown = String(raw.targetDown).trim();
+      if (raw.tolerance !== undefined && raw.tolerance !== null && String(raw.tolerance).trim()) {
+        out.tolerance = String(raw.tolerance).trim();
+      }
+      if (raw.approachWindow !== undefined && raw.approachWindow !== null) {
+        out.approachWindow = String(raw.approachWindow).trim();
+      }
+      out.audioEnabled = !!raw.audioEnabled;
+      return out;
+    }
+
+    function currentPresetName() {
+      return normalizePresetName(dispPresetEl.value);
+    }
+
+    function getPresetPrefs(name) {
+      const presetName = normalizePresetName(name);
+      return normalizePresetPrefs(presetName, displacementPrefsState.presets[presetName]);
+    }
+
+    function captureCurrentDisplacementPrefs() {
+      return normalizePresetPrefs(currentPresetName(), {
+        label: String(dispLabelEl.value || '').trim(),
+        axis: dispAxisEl.value,
+        depth: String(dispDepthEl.value || '').trim(),
+        unit: sanitizeUnitText(dispUnitEl.value),
+        targetMode: dispTargetModeEl.value,
+        targetUp: String(dispTargetUpEl.value || '').trim(),
+        targetDown: String(dispTargetDownEl.value || '').trim(),
+        tolerance: String(dispToleranceEl.value || '').trim(),
+        approachWindow: String(dispApproachWindowEl.value || '').trim(),
+        audioEnabled: !!dispAudioEnabledEl.checked
+      });
+    }
+
+    function saveDisplacementPrefsState() {
+      try {
+        localStorage.setItem(DISPLACEMENT_PREFS_KEY, JSON.stringify(displacementPrefsState));
+      } catch (e) {
+      }
+    }
+
+    function applyDisplacementPrefsToForm(prefs) {
+      const next = normalizePresetPrefs(currentPresetName(), prefs);
+      dispLabelEl.value = next.label;
+      dispAxisEl.value = next.axis;
+      dispDepthEl.value = next.depth;
+      dispUnitEl.value = next.unit;
+      dispTargetModeEl.value = next.targetMode;
+      dispTargetUpEl.value = next.targetUp;
+      dispTargetDownEl.value = next.targetDown;
+      dispToleranceEl.value = next.tolerance;
+      dispApproachWindowEl.value = next.approachWindow;
+      dispAudioEnabledEl.checked = !!next.audioEnabled;
     }
 
     function resolveAutoAxis(s) {
@@ -930,63 +1036,53 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
     }
 
     function applyDisplacementPreset() {
-      const preset = presetDefinition(dispPresetEl.value);
-      dispLabelEl.value = preset.label;
-      dispAxisEl.value = preset.axis;
-      dispTargetModeEl.value = preset.targetMode;
-      dispUnitEl.value = preset.unit;
-      if (!String(dispToleranceEl.value || '').trim()) {
-        dispToleranceEl.value = '0.5';
-      }
+      const presetName = currentPresetName();
+      const preset = presetDefinition(presetName);
+      const prefs = getPresetPrefs(presetName);
+      applyDisplacementPrefsToForm(prefs);
       dispPresetHintEl.textContent = preset.hint;
-      saveDisplacementPrefs();
+      displacementPrefsState.selectedPreset = presetName;
+      displacementPrefsState.presets[presetName] = prefs;
+      saveDisplacementPrefsState();
       renderDisplacement(lastLiveState);
     }
 
     function loadDisplacementPrefs() {
       try {
         const raw = localStorage.getItem(DISPLACEMENT_PREFS_KEY);
-        if (!raw) return;
-        const prefs = JSON.parse(raw);
-        if (prefs && typeof prefs === 'object') {
-          if (typeof prefs.label === 'string') dispLabelEl.value = prefs.label;
-          if (prefs.preset === 'aileron' || prefs.preset === 'elevator' || prefs.preset === 'rudder') dispPresetEl.value = prefs.preset;
-          if (prefs.axis === 'pitch') dispAxisEl.value = 'pitch';
-          if (prefs.axis === 'roll') dispAxisEl.value = 'roll';
-          if (prefs.axis === 'auto') dispAxisEl.value = 'auto';
-          if (prefs.depth !== undefined && prefs.depth !== null && prefs.depth !== '') dispDepthEl.value = String(prefs.depth);
-          if (typeof prefs.unit === 'string') dispUnitEl.value = prefs.unit;
-          if (prefs.targetMode === 'angle') dispTargetModeEl.value = 'angle';
-          if (prefs.targetMode === 'displacement') dispTargetModeEl.value = 'displacement';
-          if (prefs.targetUp !== undefined && prefs.targetUp !== null && prefs.targetUp !== '') dispTargetUpEl.value = String(prefs.targetUp);
-          if (prefs.targetDown !== undefined && prefs.targetDown !== null && prefs.targetDown !== '') dispTargetDownEl.value = String(prefs.targetDown);
-          if (prefs.tolerance !== undefined && prefs.tolerance !== null && prefs.tolerance !== '') dispToleranceEl.value = String(prefs.tolerance);
-          if (prefs.approachWindow !== undefined && prefs.approachWindow !== null && prefs.approachWindow !== '') dispApproachWindowEl.value = String(prefs.approachWindow);
-          dispAudioEnabledEl.checked = !!prefs.audioEnabled;
+        if (raw) {
+          const prefs = JSON.parse(raw);
+          if (prefs && typeof prefs === 'object') {
+            displacementPrefsState.selectedPreset = normalizePresetName(prefs.selectedPreset);
+            if (prefs.presets && typeof prefs.presets === 'object') {
+              DISPLACEMENT_PRESET_NAMES.forEach((name) => {
+                displacementPrefsState.presets[name] = normalizePresetPrefs(name, prefs.presets[name]);
+              });
+            }
+          }
+        } else {
+          const legacyRaw = localStorage.getItem(LEGACY_DISPLACEMENT_PREFS_KEY);
+          if (legacyRaw) {
+            const legacy = JSON.parse(legacyRaw);
+            const legacyPreset = normalizePresetName(legacy && legacy.preset);
+            displacementPrefsState.selectedPreset = legacyPreset;
+            displacementPrefsState.presets[legacyPreset] = normalizePresetPrefs(legacyPreset, legacy);
+          }
         }
       } catch (e) {
       }
+      const presetName = normalizePresetName(displacementPrefsState.selectedPreset);
+      dispPresetEl.value = presetName;
+      dispPresetHintEl.textContent = presetDefinition(presetName).hint;
+      applyDisplacementPrefsToForm(getPresetPrefs(presetName));
+      saveDisplacementPrefsState();
     }
 
     function saveDisplacementPrefs() {
-      try {
-        const prefs = {
-          label: String(dispLabelEl.value || '').trim(),
-          preset: dispPresetEl.value === 'custom' ? 'custom' : dispPresetEl.value,
-          axis: dispAxisEl.value === 'pitch' ? 'pitch' : 'roll',
-          depth: String(dispDepthEl.value || '').trim(),
-          unit: sanitizeUnitText(dispUnitEl.value),
-          targetMode: dispTargetModeEl.value === 'angle' ? 'angle' : 'displacement',
-          targetUp: String(dispTargetUpEl.value || '').trim(),
-          targetDown: String(dispTargetDownEl.value || '').trim(),
-          tolerance: String(dispToleranceEl.value || '').trim(),
-          approachWindow: String(dispApproachWindowEl.value || '').trim(),
-          audioEnabled: !!dispAudioEnabledEl.checked
-        };
-        if (dispAxisEl.value === 'auto') prefs.axis = 'auto';
-        localStorage.setItem(DISPLACEMENT_PREFS_KEY, JSON.stringify(prefs));
-      } catch (e) {
-      }
+      const presetName = currentPresetName();
+      displacementPrefsState.selectedPreset = presetName;
+      displacementPrefsState.presets[presetName] = captureCurrentDisplacementPrefs();
+      saveDisplacementPrefsState();
     }
 
     function linearySourceMetaName(source) {

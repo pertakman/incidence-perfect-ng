@@ -139,6 +139,12 @@ How to connect:
 3. Open browser and go to:
    - `http://192.168.4.1`
 
+STA / hostname note:
+- In `STA with AP fallback` mode, the unit can also be reached by its STA IP or by `http://<hostname>.local`.
+- The `.local` suffix is required because this uses local-network mDNS discovery rather than normal internet DNS.
+- On some Windows/network setups, `.local` resolution can be inconsistent.
+- If `hostname.local` does not resolve, use the STA IP address instead.
+
 Available in Phase A:
 - Live readout (`ROLL`, `PITCH`, status line mirror)
 - Battery telemetry on both device and web (`BAT %`, voltage, charging hint)
@@ -164,17 +170,20 @@ Available in Phase A:
   - live offset/zero/alignment references and workflow flags
 - Surface displacement setup assistant:
   - estimate trailing-edge displacement from `ROLL` or `PITCH`
-  - surface presets for `Aileron`, `Elevator`, and `Rudder`
-  - `AUTO` source can follow the active single-axis display, with preset fallback when the UI is in `BOTH`
+  - surface presets for `Aileron`, `Elevator`, `Flap`, and `Rudder`
+  - all presets default to `PITCH`, but you can still switch source manually
+  - `AUTO` source can still follow the active single-axis display if you prefer it
   - choose target by angle or displacement
   - separate `UP` / `DOWN` targets for differential setup work
   - configurable tolerance window
   - optional configurable audio approach window, with automatic fallback
   - optional browser-side audio cues while approaching target
+  - depth and target values are remembered per preset in the browser
 - Network panel:
   - switch between `AP only` and `STA with AP fallback`
   - set STA SSID/password
   - set custom hostname (`<your-hostname>.local`) for multi-unit deployments
+  - hostname access is a convenience; STA IP remains the most reliable fallback if `.local` lookup fails
 - Device settings panel:
   - battery presence mode, startup ZERO, readout decimals, touch lock, and brightness are separated from network settings
   - startup ZERO can be enabled/disabled for cold boot behavior
