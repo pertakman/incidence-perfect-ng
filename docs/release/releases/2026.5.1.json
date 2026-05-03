@@ -1,0 +1,20 @@
+{
+  "version": "2026.5.1",
+  "ota_target_version": "2026.5.1",
+  "date": "2026-05-03",
+  "source_commit": "v2026.5.1 tag commit",
+  "platformio_env": "esp32s3",
+  "supersedes": "2026.3.22-rc3",
+  "artifact": {
+    "path": ".pio/build/esp32s3/firmware.bin",
+    "sha256": "070EECEE2463A93280D2A9ACD2EB9BF695C3EAAB008A3ACF885A8492BAC19D7F",
+    "bytes": 1490608
+  },
+  "validation": {
+    "session_log": "docs/testing/session-logs/2026-05-03-validation-session.md",
+    "session_template": "docs/testing/validation-session-template.md",
+    "checklist": "docs/testing/hardware-validation-checklist.md",
+    "touch_ui_suite": "docs/testing/touch-ui-step2-test-suite.md",
+    "manual_pdf": "docs/manual/releases/Incidence-Perfect-NG-Manual-2026.5.1.pdf"
+  }
+}

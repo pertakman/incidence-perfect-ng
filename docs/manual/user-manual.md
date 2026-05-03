@@ -1,6 +1,6 @@
 ﻿Incidence Perfect NG is a compact 2-axis inclinometer/incidence meter built around an ESP32-S3 + AMOLED touchscreen. It measures **roll** and **pitch** and provides workflows for **ZERO**, **OFFSET CAL**, **MODE**, **ROTATE**, and **ALIGN**.
 
-> Beta note: This manual describes the current firmware behavior. If something differs on your device, report the **firmware version shown on the splash screen**.
+This manual describes the current firmware behavior. If something differs on your device, report the **firmware version shown on the splash screen**.
 
 ---
 
@@ -340,7 +340,7 @@ You can update firmware over Wi-Fi from the web page:
 
 1. Open the device web UI (`http://192.168.4.1` in AP mode, or its STA IP/hostname).
 2. Expand `OTA Update`.
-3. Select the release-candidate firmware `.bin` built for `esp32s3`.
+3. Select the firmware `.bin` built for `esp32s3`.
 4. Enter the exact target firmware version shown in the release notes (`YYYY.M.X`).
 5. Provide matching SHA-256:
    - use browser auto-calc if available, or
@@ -483,12 +483,12 @@ For tasks near vertical (for example checking a table-saw blade relative to the 
 
 ---
 
-## 10) Beta Tester Checklist + Feedback
+## 10) Validation + Feedback
 
-If you're testing externally, use:
+For validation and release readiness, use:
 
-- `../release/beta-checklist.md`
-- `../release/tester-handoff-note.md`
+- `../testing/hardware-validation-checklist.md`
+- `../testing/validation-session-template.md`
 
 When reporting an issue, include:
 

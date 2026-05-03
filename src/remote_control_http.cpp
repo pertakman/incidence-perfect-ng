@@ -8,6 +8,7 @@
 #include "remote_control_page.h"
 #include "remote_protocol_utils.h"
 #include "ui_lvgl.h"
+#include <math.h>
 
 namespace {
 
@@ -81,6 +82,10 @@ void json_escape_copy(char *dst, size_t dst_size, const char *src) {
     dst[j++] = c;
   }
   dst[j] = '\0';
+}
+
+float json_safe_float(float value, float fallback = 0.0f) {
+  return isfinite(value) ? value : fallback;
 }
 
 void send_network_state_json(bool ok = true, const char *error = nullptr, int code = 200) {
@@ -232,6 +237,34 @@ void handle_state() {
   BatteryTelemetry battery = {};
   getBatteryTelemetry(&battery);
 
+  const float diag_sens_ax = (diag.valid ? json_safe_float(diag.sens_ax) : 0.0f);
+  const float diag_sens_ay = (diag.valid ? json_safe_float(diag.sens_ay) : 0.0f);
+  const float diag_sens_az = (diag.valid ? json_safe_float(diag.sens_az) : 0.0f);
+  const float diag_sens_gx = (diag.valid ? json_safe_float(diag.sens_gx) : 0.0f);
+  const float diag_sens_gy = (diag.valid ? json_safe_float(diag.sens_gy) : 0.0f);
+  const float diag_sens_gz = (diag.valid ? json_safe_float(diag.sens_gz) : 0.0f);
+  const float diag_map_ax = (diag.valid ? json_safe_float(diag.map_ax) : 0.0f);
+  const float diag_map_ay = (diag.valid ? json_safe_float(diag.map_ay) : 0.0f);
+  const float diag_map_az = (diag.valid ? json_safe_float(diag.map_az) : 0.0f);
+  const float diag_map_gx = (diag.valid ? json_safe_float(diag.map_gx) : 0.0f);
+  const float diag_map_gy = (diag.valid ? json_safe_float(diag.map_gy) : 0.0f);
+  const float diag_corr_ax = (diag.valid ? json_safe_float(diag.corr_ax) : 0.0f);
+  const float diag_corr_ay = (diag.valid ? json_safe_float(diag.corr_ay) : 0.0f);
+  const float diag_corr_az = (diag.valid ? json_safe_float(diag.corr_az) : 0.0f);
+  const float diag_corr_gx = (diag.valid ? json_safe_float(diag.corr_gx) : 0.0f);
+  const float diag_corr_gy = (diag.valid ? json_safe_float(diag.corr_gy) : 0.0f);
+  const float diag_angle_roll = (diag.valid ? json_safe_float(diag.angle_roll) : 0.0f);
+  const float diag_angle_pitch = (diag.valid ? json_safe_float(diag.angle_pitch) : 0.0f);
+  const float cal_bias_ax = json_safe_float(cal.bias_ax);
+  const float cal_bias_ay = json_safe_float(cal.bias_ay);
+  const float cal_bias_az = json_safe_float(cal.bias_az);
+  const float cal_bias_gx = json_safe_float(cal.bias_gx);
+  const float cal_bias_gy = json_safe_float(cal.bias_gy);
+  const float cal_zero_roll = json_safe_float(cal.zero_roll);
+  const float cal_zero_pitch = json_safe_float(cal.zero_pitch);
+  const float cal_align_roll = json_safe_float(cal.align_roll);
+  const float cal_align_pitch = json_safe_float(cal.align_pitch);
+
   json_escape_copy(state_fw_esc, sizeof(state_fw_esc), FW_VERSION);
   json_escape_copy(state_orient_esc, sizeof(state_orient_esc), orientation_text());
   json_escape_copy(state_axis_esc, sizeof(state_axis_esc), axis_text());
@@ -300,13 +333,13 @@ void handle_state() {
     offset_cal_rem_s,
     offset_cal_progress_pct,
     diag.valid ? "true" : "false",
-    diag.sens_ax, diag.sens_ay, diag.sens_az, diag.sens_gx, diag.sens_gy, diag.sens_gz,
-    diag.map_ax, diag.map_ay, diag.map_az, diag.map_gx, diag.map_gy,
-    diag.corr_ax, diag.corr_ay, diag.corr_az, diag.corr_gx, diag.corr_gy,
-    diag.angle_roll, diag.angle_pitch,
-    cal.bias_ax, cal.bias_ay, cal.bias_az, cal.bias_gx, cal.bias_gy,
-    cal.zero_roll, cal.zero_pitch,
-    cal.align_roll, cal.align_pitch
+    diag_sens_ax, diag_sens_ay, diag_sens_az, diag_sens_gx, diag_sens_gy, diag_sens_gz,
+    diag_map_ax, diag_map_ay, diag_map_az, diag_map_gx, diag_map_gy,
+    diag_corr_ax, diag_corr_ay, diag_corr_az, diag_corr_gx, diag_corr_gy,
+    diag_angle_roll, diag_angle_pitch,
+    cal_bias_ax, cal_bias_ay, cal_bias_az, cal_bias_gx, cal_bias_gy,
+    cal_zero_roll, cal_zero_pitch,
+    cal_align_roll, cal_align_pitch
   );
   if (written < 0 || written >= (int)sizeof(state_json_buf)) {
     snprintf(

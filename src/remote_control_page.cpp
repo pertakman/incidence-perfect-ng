@@ -329,7 +329,7 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
     </div>
   </details>
 
-  <details id="diagnosticsCard" class="card">
+  <details id="deviceSettingsCard" class="card">
     <summary>Device Settings</summary>
     <div id="deviceStatus" class="muted">Loading device settings...</div>
     <div class="row" style="margin-top:8px;">
@@ -381,7 +381,7 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
     <div id="deviceMsg" class="muted" style="margin-top:8px;"></div>
   </details>
 
-  <details class="card">
+  <details id="diagnosticsCard" class="card">
     <summary>Network</summary>
     <div id="netStatus" class="muted">Loading network state...</div>
     <div id="netAddr" class="muted"></div>
@@ -1958,7 +1958,7 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
             otaVersionEl.value = String(s.fw);
           }
         }
-        if (diagnosticsCardEl && diagnosticsCardEl.open) renderDiag(s);
+        renderDiag(s);
         normalControls.classList.toggle('hidden', s.mode_active || s.align_active || s.offset_cal_active || s.zero_active);
         modeControls.classList.toggle('hidden', !s.mode_active || s.align_active || s.offset_cal_active || s.zero_active);
         alignControls.classList.toggle('hidden', !s.align_active || s.offset_cal_active || s.zero_active);
@@ -2000,7 +2000,7 @@ const char PAGE_HTML[] PROGMEM = R"HTML(
         }
       } catch (e) {
         stateFailureCount += 1;
-        if (stateFailureCount >= 2 && diagnosticsCardEl && diagnosticsCardEl.open) clearDiag(true);
+        if (stateFailureCount >= 2) clearDiag(true);
       } finally {
         stateRefreshInFlight = false;
         scheduleStatePoll(nextStatePollDelay(lastLiveState));
