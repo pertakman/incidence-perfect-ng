@@ -2,7 +2,7 @@
   "version": "2026.5.1",
   "ota_target_version": "2026.5.1",
   "date": "2026-05-03",
-  "source_commit": "v2026.5.1 tag commit",
+  "source_commit": "225b185",
   "platformio_env": "esp32s3",
   "supersedes": "2026.3.22-rc3",
   "artifact": {
